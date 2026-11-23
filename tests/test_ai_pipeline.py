@@ -143,8 +143,10 @@ class TestAIPipeline(unittest.TestCase):
         mock_resp.iter_bytes.return_value = [
             (
                 b'{"models":['
+                b'{"name":"models/gemini-omni-flash-preview","displayName":"Gemini Omni Flash Preview","supportedGenerationMethods":["generateContent"]},'
+                b'{"name":"models/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash-Lite","supportedGenerationMethods":["generateContent"]},'
                 b'{"name":"models/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","supportedGenerationMethods":["generateContent"]},'
-                b'{"name":"models/gemini-3.1-flash-lite","displayName":"Gemini 3.1 Flash-Lite","supportedGenerationMethods":["generateContent"]},'
+                b'{"name":"models/gemini-3.5-flash","displayName":"Gemini 3.5 Flash","supportedGenerationMethods":["generateContent"]},'
                 b'{"name":"models/text-embedding-004","displayName":"Embedding","supportedGenerationMethods":["embedContent"]}'
                 b"]}"
             )
@@ -157,8 +159,11 @@ class TestAIPipeline(unittest.TestCase):
         result = test_provider_connection(provider_id="gemini", api_key=sentinel_key)
         self.assertTrue(result["ok"])
         self.assertEqual(result["status_code"], 200)
-        self.assertEqual(len(result["models"]), 2)
-        self.assertEqual(result["models"][0]["id"], "gemini-2.5-flash")
+        ids = [m["id"] for m in result["models"]]
+        self.assertNotIn("gemini-omni-flash-preview", ids)
+        self.assertEqual(ids[0], "gemini-3.5-flash")
+        self.assertEqual(ids[1], "gemini-2.5-flash")
+        self.assertEqual(ids[2], "gemini-2.5-flash-lite")
 
         call_args = mock_client.stream.call_args
         self.assertEqual(call_args.args[0], "GET")
@@ -200,6 +205,32 @@ class TestAIPipeline(unittest.TestCase):
         )
         self.assertEqual(text, '{"ok":true}')
         self.assertEqual(mock_client.stream.call_count, 2)
+
+    @patch("alvea.ai.pipeline.call_llm_provider")
+    def test_gemini_auto_switches_to_fallback_model_on_429(self, mock_call: MagicMock) -> None:
+        valid_json = (
+            '{"title":"Support Flow","lanes":[{"id":"L1","name":"Support","kind":"department"}],'
+            '"nodes":[{"id":"N1","label":"Receive ticket","node_type":"start","lane_id":"L1"},'
+            '{"id":"N2","label":"Resolve ticket","node_type":"end_success","lane_id":"L1"}],'
+            '"edges":[{"source":"N1","target":"N2"}]}'
+        )
+
+        def _fake_call(**kwargs):
+            if kwargs["model_id"] == "gemini-3.8-flash":
+                raise ProviderCallError("Rate limit exceeded (HTTP 429).", status_code=429)
+            return valid_json, {}
+
+        mock_call.side_effect = _fake_call
+        pipeline = ProcessPipeline()
+        outcome = pipeline.generate(
+            text="Customer submits email and support resolves it.",
+            provider_id="gemini",
+            model_id="gemini-3.8-flash",
+            api_key="AIzaSyAUTO_SWITCH_TEST_99999",
+            allow_native_fallback=False,
+        )
+        self.assertEqual(outcome.meta["model"], "gemini-2.5-flash")
+        self.assertIn("Switched to gemini-2.5-flash", outcome.meta["fallback_notice"])
 
 
 if __name__ == "__main__":

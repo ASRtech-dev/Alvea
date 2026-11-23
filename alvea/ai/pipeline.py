@@ -272,11 +272,47 @@ class ProcessPipeline:
                     custom_auth_prefix=custom_auth_prefix,
                 )
             except (ProviderCallError, SSRFBlockedError) as exc:
-                if not allow_native_fallback or isinstance(exc, SSRFBlockedError) or getattr(exc, "status_code", 500) == 401:
-                    raise
-                graph = self.nlp_engine.parse(text, direction=direction, title=title)
-                stage = "native_fallback"
-                fallback_notice = f"Automatic fallback to Native Python Engine ({exc})"
+                # For Google Gemini, if the chosen model hits 429/503/404 (e.g. zero-quota preview or peak load),
+                # automatically try one high-availability Flash/Flash-Lite fallback model before giving up on Gemini.
+                recovered = False
+                if (
+                    provider.id == "gemini"
+                    and isinstance(exc, ProviderCallError)
+                    and exc.status_code in (429, 503, 404)
+                ):
+                    for alt_model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite"):
+                        if alt_model == chosen_model:
+                            continue
+                        try:
+                            graph, stage = self._run_llm_with_repair(
+                                text=text,
+                                provider=provider,
+                                model_id=alt_model,
+                                direction=direction,
+                                title=title,
+                                api_key=api_key,
+                                base_url=base_url,
+                                custom_protocol=custom_protocol,
+                                custom_auth_header=custom_auth_header,
+                                custom_auth_prefix=custom_auth_prefix,
+                            )
+                            fallback_notice = (
+                                f"Switched to {alt_model} because '{chosen_model}' returned HTTP {exc.status_code}."
+                            )
+                            chosen_model = alt_model
+                            recovered = True
+                            break
+                        except ProviderCallError as alt_exc:
+                            if alt_exc.status_code == 401:
+                                raise
+                            continue
+
+                if not recovered:
+                    if not allow_native_fallback or isinstance(exc, SSRFBlockedError) or getattr(exc, "status_code", 500) == 401:
+                        raise
+                    graph = self.nlp_engine.parse(text, direction=direction, title=title)
+                    stage = "native_fallback"
+                    fallback_notice = f"Automatic fallback to Native Python Engine ({exc})"
 
         graph.direction = direction
         if title:

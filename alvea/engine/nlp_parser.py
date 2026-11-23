@@ -74,8 +74,9 @@ CANONICAL_ACTORS: tuple[ActorPattern, ...] = (
 CONTROL_PREFIXES = frozenset({
     "if", "else", "elif", "else if", "otherwise", "when", "unless", "then",
     "parallel", "in parallel", "simultaneously", "meanwhile", "fork", "join",
-    "step", "note", "start", "end", "si", "sino", "en paralelo", "mientras tanto",
-    "de lo contrario", "cuando", "paso", "nota", "inicio", "fin",
+    "step", "note", "start", "end", "options", "two options", "si", "sino",
+    "en paralelo", "mientras tanto", "de lo contrario", "cuando", "paso",
+    "nota", "inicio", "fin", "opciones", "dos opciones", "tienen dos opciones",
 })
 
 # Anti-ReDoS flat patterns

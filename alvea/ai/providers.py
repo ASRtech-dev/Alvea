@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections.abc import Iterable
 from typing import Any
@@ -470,7 +471,41 @@ _GEMINI_EXCLUDED_SUBSTRINGS = (
     "deep-research",
     "bisheng",
     "learnlm",
+    "omni",
+    "live",
+    "image",
+    "vision",
+    "customtools",
 )
+
+_GEMINI_VER_RE = re.compile(r"gemini-(\d+)(?:\.(\d+))?", re.IGNORECASE)
+
+
+def _gemini_model_sort_key(m: dict[str, Any]) -> tuple[int, int, int, int, str]:
+    mid = str(m.get("id") or "").lower()
+    ver_match = _GEMINI_VER_RE.search(mid)
+    major = int(ver_match.group(1)) if ver_match else 0
+    minor = int(ver_match.group(2)) if (ver_match and ver_match.group(2)) else 0
+
+    is_preview = any(tok in mid for tok in ("preview", "exp", "latest"))
+    is_lite = "flash-lite" in mid
+    is_flash = "flash" in mid
+    is_pro = "pro" in mid
+
+    if major >= 2 and is_flash and not is_lite and not is_preview:
+        tier = 0
+    elif major >= 2 and is_lite and not is_preview:
+        tier = 1
+    elif major >= 2 and is_flash:
+        tier = 2
+    elif major >= 2 and is_pro and not is_preview:
+        tier = 3
+    elif major >= 2 and is_pro:
+        tier = 4
+    else:
+        tier = 5
+
+    return (tier, -major, -minor, len(mid), mid)
 
 
 def _probe_gemini_connection(
@@ -559,20 +594,8 @@ def _probe_gemini_connection(
                 "structured_mode": "json_schema",
             })
 
-        # Prefer newest flash models first, then pro, then rest
-        def _rank(m: dict[str, Any]) -> tuple[int, str]:
-            mid = m["id"].lower()
-            if "flash" in mid and "lite" not in mid and "exp" not in mid:
-                return (0, mid)
-            if "flash-lite" in mid:
-                return (1, mid)
-            if "pro" in mid and "exp" not in mid:
-                return (2, mid)
-            return (3, mid)
-
-        # Sort newest version numbers first within each priority tier (flash -> flash-lite -> pro -> other)
-        live_models.sort(key=lambda m: m["id"].lower(), reverse=True)
-        live_models.sort(key=lambda m: _rank(m)[0])
+        # Rank stable versioned Flash & Flash-Lite models first (numeric version desc), never preview/omni first
+        live_models.sort(key=_gemini_model_sort_key)
         live_models = live_models[:16]
 
         msg = (
