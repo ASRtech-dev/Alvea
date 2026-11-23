@@ -1847,6 +1847,18 @@
       }
       resultEl.textContent = `✓ ${data.message || "Connected."}`;
       resultEl.className = "test-result test-result--ok";
+
+      // If provider returned live verified models (e.g. Google Gemini GET /v1beta/models), sync dropdown!
+      if (Array.isArray(data.models) && data.models.length > 0 && provider !== "custom_openai") {
+        const spec = state.providers.find((p) => p.id === provider);
+        if (spec) {
+          spec.models = data.models;
+          spec.default_model = data.models[0].id;
+          if (state.currentProvider === provider) {
+            selectProvider(provider);
+          }
+        }
+      }
     } catch (_) {
       resultEl.textContent = "✗ Connection test failed (network/server error).";
       resultEl.className = "test-result test-result--err";

@@ -385,6 +385,33 @@ def test_provider_connection(
 
     chosen_model = (model_id or provider.default_model or "custom-model").strip()
     short_timeout = httpx.Timeout(connect=4.0, read=12.0, write=5.0, pool=3.0)
+    effective_protocol = _resolve_effective_protocol(provider, custom_protocol)
+
+    # 1. Preferred zero-token key & live-model probe for Gemini (avoids per-model HTTP 503 overload spikes)
+    if effective_protocol == "gemini":
+        return _probe_gemini_connection(
+            provider=provider,
+            api_key=api_key,
+            custom_base_url=custom_base_url,
+            custom_auth_header=custom_auth_header,
+            custom_auth_prefix=custom_auth_prefix,
+            timeout=short_timeout,
+            started_at=t0,
+        )
+
+    # 2. Fast zero-token /models probe for OpenAI-compatible APIs (falls back to completion probe if unsupported)
+    if effective_protocol == "openai_compat" and provider.id != "github_models":
+        probe_res = _probe_openai_models_endpoint(
+            provider=provider,
+            api_key=api_key,
+            custom_base_url=custom_base_url,
+            custom_auth_header=custom_auth_header,
+            custom_auth_prefix=custom_auth_prefix,
+            timeout=short_timeout,
+            started_at=t0,
+        )
+        if probe_res is not None:
+            return probe_res
 
     try:
         text, _ = call_llm_provider(
@@ -400,7 +427,7 @@ def test_provider_connection(
             custom_auth_header=custom_auth_header,
             custom_auth_prefix=custom_auth_prefix,
             temperature=0.0,
-            max_tokens=32,
+            max_tokens=128,
             timeout_override=short_timeout,
         )
         latency = round((time.perf_counter() - t0) * 1000, 1)
@@ -430,6 +457,233 @@ def test_provider_connection(
         }
 
 
+_GEMINI_EXCLUDED_SUBSTRINGS = (
+    "embedding",
+    "imagen",
+    "veo",
+    "aqa",
+    "tts",
+    "audio",
+    "robotics",
+    "computer-use",
+    "lyria",
+    "deep-research",
+    "bisheng",
+    "learnlm",
+)
+
+
+def _probe_gemini_connection(
+    *,
+    provider: ProviderSpec,
+    api_key: str | None,
+    custom_base_url: str | None,
+    custom_auth_header: str | None,
+    custom_auth_prefix: str | None,
+    timeout: httpx.Timeout,
+    started_at: float,
+) -> dict[str, Any]:
+    """Validates a Gemini API key via GET /v1beta/models (0 tokens, immune to per-model 503 spikes)."""
+    base_url, _ = _resolve_provider_url(provider, custom_base_url)
+    resolved_key = _resolve_api_key(provider, api_key)
+    extra_secrets = (resolved_key,) if resolved_key else None
+
+    if resolved_key:
+        validate_header_value(resolved_key)
+    safe_auth_header = validate_custom_auth_header(custom_auth_header) if provider.id == "custom_openai" else None
+    safe_auth_prefix = custom_auth_prefix if provider.id == "custom_openai" else None
+
+    if provider.requires_api_key and not resolved_key:
+        return {
+            "ok": False,
+            "status_code": 401,
+            "latency_ms": round((time.perf_counter() - started_at) * 1000, 1),
+            "message": f"Missing API Key for {provider.name}. Paste your key above first.",
+        }
+
+    url = f"{base_url}/models" if base_url.endswith("/v1beta") else f"{base_url}/v1beta/models"
+    headers: dict[str, str] = {"Accept": "application/json"}
+    _apply_custom_auth(
+        headers,
+        resolved_key,
+        default_header="x-goog-api-key",
+        default_prefix="",
+        custom_auth_header=safe_auth_header,
+        custom_auth_prefix=safe_auth_prefix,
+    )
+
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+            with client.stream("GET", url, headers=headers) as resp:
+                latency = round((time.perf_counter() - started_at) * 1000, 1)
+                if 300 <= resp.status_code < 400:
+                    return {
+                        "ok": False,
+                        "status_code": 502,
+                        "latency_ms": latency,
+                        "message": f"HTTP redirect blocked by security policy for {provider.name}.",
+                    }
+                if resp.status_code in (400, 401, 403):
+                    return {
+                        "ok": False,
+                        "status_code": 401,
+                        "latency_ms": latency,
+                        "message": f"Credentials rejected by {provider.name} (HTTP {resp.status_code}). Check your API Key.",
+                    }
+                if resp.status_code >= 400:
+                    return {
+                        "ok": False,
+                        "status_code": resp.status_code if resp.status_code == 429 else 502,
+                        "latency_ms": latency,
+                        "message": f"Remote error from {provider.name} (HTTP {resp.status_code}).",
+                    }
+                data = _read_bounded_json(resp)
+
+        live_models: list[dict[str, Any]] = []
+        for item in data.get("models") or []:
+            if not isinstance(item, dict):
+                continue
+            methods = item.get("supportedGenerationMethods") or []
+            if "generateContent" not in methods:
+                continue
+            raw_name = str(item.get("name") or "").strip()
+            mid = raw_name.removeprefix("models/")
+            low = mid.lower()
+            if not low.startswith("gemini-") or any(ex in low for ex in _GEMINI_EXCLUDED_SUBSTRINGS):
+                continue
+            display = str(item.get("displayName") or mid).strip()
+            live_models.append({
+                "id": mid,
+                "label": f"{display} ({mid})" if display.lower() != mid.lower() else mid,
+                "badges": ["Live", "Verified"],
+                "structured_mode": "json_schema",
+            })
+
+        # Prefer newest flash models first, then pro, then rest
+        def _rank(m: dict[str, Any]) -> tuple[int, str]:
+            mid = m["id"].lower()
+            if "flash" in mid and "lite" not in mid and "exp" not in mid:
+                return (0, mid)
+            if "flash-lite" in mid:
+                return (1, mid)
+            if "pro" in mid and "exp" not in mid:
+                return (2, mid)
+            return (3, mid)
+
+        # Sort newest version numbers first within each priority tier (flash -> flash-lite -> pro -> other)
+        live_models.sort(key=lambda m: m["id"].lower(), reverse=True)
+        live_models.sort(key=lambda m: _rank(m)[0])
+        live_models = live_models[:16]
+
+        msg = (
+            f"API Key verified! {len(live_models)} live Gemini model(s) synced in {int(latency)} ms."
+            if live_models
+            else f"API Key verified with {provider.name} in {int(latency)} ms."
+        )
+        return {
+            "ok": True,
+            "status_code": 200,
+            "latency_ms": latency,
+            "message": msg,
+            "models": live_models,
+        }
+    except ProviderCallError as exc:
+        return {
+            "ok": False,
+            "status_code": exc.status_code,
+            "latency_ms": round((time.perf_counter() - started_at) * 1000, 1),
+            "message": redact_secrets(str(exc), extra_secrets=extra_secrets),
+        }
+    except httpx.TimeoutException:
+        return {
+            "ok": False,
+            "status_code": 504,
+            "latency_ms": round((time.perf_counter() - started_at) * 1000, 1),
+            "message": f"Request timed out while contacting {provider.name}.",
+        }
+    except httpx.HTTPError:
+        return {
+            "ok": False,
+            "status_code": 502,
+            "latency_ms": round((time.perf_counter() - started_at) * 1000, 1),
+            "message": f"Could not connect to {provider.name}. Check your network or Base URL.",
+        }
+
+
+def _probe_openai_models_endpoint(
+    *,
+    provider: ProviderSpec,
+    api_key: str | None,
+    custom_base_url: str | None,
+    custom_auth_header: str | None,
+    custom_auth_prefix: str | None,
+    timeout: httpx.Timeout,
+    started_at: float,
+) -> dict[str, Any] | None:
+    """Attempts a zero-token GET /models key check; returns None to fall back to completion probe if unsupported."""
+    base_url, _ = _resolve_provider_url(provider, custom_base_url)
+    resolved_key = _resolve_api_key(provider, api_key)
+    if resolved_key:
+        validate_header_value(resolved_key)
+    safe_auth_header = validate_custom_auth_header(custom_auth_header) if provider.id == "custom_openai" else None
+    safe_auth_prefix = custom_auth_prefix if provider.id == "custom_openai" else None
+
+    if provider.requires_api_key and not resolved_key:
+        return {
+            "ok": False,
+            "status_code": 401,
+            "latency_ms": round((time.perf_counter() - started_at) * 1000, 1),
+            "message": f"Missing API Key for {provider.name}. Paste your key above first.",
+        }
+
+    if base_url.endswith("/chat/completions"):
+        url = base_url[: -len("/chat/completions")] + "/models"
+    else:
+        url = f"{base_url}/models"
+
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if resolved_key:
+        _apply_custom_auth(
+            headers,
+            resolved_key,
+            default_header="Authorization",
+            default_prefix="Bearer",
+            custom_auth_header=safe_auth_header,
+            custom_auth_prefix=safe_auth_prefix,
+        )
+
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=False) as client:
+            with client.stream("GET", url, headers=headers) as resp:
+                latency = round((time.perf_counter() - started_at) * 1000, 1)
+                if 300 <= resp.status_code < 400:
+                    return {
+                        "ok": False,
+                        "status_code": 502,
+                        "latency_ms": latency,
+                        "message": f"HTTP redirect blocked by security policy for {provider.name}.",
+                    }
+                if resp.status_code in (401, 403):
+                    return {
+                        "ok": False,
+                        "status_code": 401,
+                        "latency_ms": latency,
+                        "message": f"Credentials rejected by {provider.name} (HTTP {resp.status_code}). Check your API Key.",
+                    }
+                if resp.status_code == 200:
+                    _read_bounded_json(resp)
+                    return {
+                        "ok": True,
+                        "status_code": 200,
+                        "latency_ms": latency,
+                        "message": f"API Key verified with {provider.name} in {int(latency)} ms.",
+                    }
+                # 404/405/etc.: endpoint doesn't expose GET /models -> fall back to completion probe
+                return None
+    except (httpx.HTTPError, ProviderCallError):
+        return None
+
+
 def _post_bounded_json(
     client: httpx.Client,
     url: str,
@@ -439,9 +693,18 @@ def _post_bounded_json(
     provider_name: str,
     extra_secrets: Iterable[str] | None = None,
 ) -> dict[str, Any]:
-    with client.stream("POST", url, headers=headers, json=payload) as resp:
-        _check_http_status(resp, provider_name, extra_secrets=extra_secrets)
-        return _read_bounded_json(resp)
+    for attempt in range(2):
+        with client.stream("POST", url, headers=headers, json=payload) as resp:
+            if resp.status_code == 503 and attempt == 0:
+                time.sleep(1.0)
+                continue
+            _check_http_status(resp, provider_name, extra_secrets=extra_secrets)
+            return _read_bounded_json(resp)
+    raise ProviderCallError(
+        f"{provider_name} is temporarily overloaded (HTTP 503). Retry in a moment or switch to a lighter model.",
+        status_code=503,
+        extra_secrets=extra_secrets,
+    )
 
 
 def _call_gemini(
@@ -750,6 +1013,18 @@ def _check_http_status(
             f"{provider_name} rejected the request format (HTTP {resp.status_code}).",
             status_code=400,
             retryable_mode=True,
+            extra_secrets=extra_secrets,
+        )
+    if resp.status_code == 404:
+        raise ProviderCallError(
+            f"Model not found on {provider_name} (HTTP 404). Click 'Test Connection' to sync available models.",
+            status_code=404,
+            extra_secrets=extra_secrets,
+        )
+    if resp.status_code == 503:
+        raise ProviderCallError(
+            f"{provider_name} is temporarily overloaded (HTTP 503). Retry in a few seconds or switch to a Flash-Lite / alternate model.",
+            status_code=503,
             extra_secrets=extra_secrets,
         )
     if resp.status_code >= 400:

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from alvea.ai.catalog import get_provider
 from alvea.ai.pipeline import ProcessPipeline, repair_and_parse_json_dict
-from alvea.ai.providers import call_llm_provider
+from alvea.ai.providers import ProviderCallError, call_llm_provider, test_provider_connection
 from alvea.models import Direction, ProcessGraph
 
 
@@ -131,6 +131,75 @@ class TestAIPipeline(unittest.TestCase):
         call_args = mock_client.stream.call_args
         self.assertEqual(call_args.args[1], "https://api.example-gateway.com/v1/messages")
         self.assertEqual(call_args.kwargs["headers"].get("X-Gateway-Key"), "Token my_custom_secret_token_999")
+
+    @patch("alvea.ai.providers.validate_outbound_url", side_effect=lambda u, **kw: u)
+    @patch("alvea.ai.providers.httpx.Client")
+    def test_gemini_connection_probe_uses_models_endpoint_and_syncs_models(
+        self, mock_client_cls: MagicMock, _mock_ssrf: MagicMock
+    ) -> None:
+        sentinel_key = "AIzaSyGEMINI_PROBE_TEST_999999"
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_bytes.return_value = [
+            (
+                b'{"models":['
+                b'{"name":"models/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","supportedGenerationMethods":["generateContent"]},'
+                b'{"name":"models/gemini-3.1-flash-lite","displayName":"Gemini 3.1 Flash-Lite","supportedGenerationMethods":["generateContent"]},'
+                b'{"name":"models/text-embedding-004","displayName":"Embedding","supportedGenerationMethods":["embedContent"]}'
+                b"]}"
+            )
+        ]
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value.__enter__.return_value = mock_resp
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+
+        result = test_provider_connection(provider_id="gemini", api_key=sentinel_key)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["status_code"], 200)
+        self.assertEqual(len(result["models"]), 2)
+        self.assertEqual(result["models"][0]["id"], "gemini-2.5-flash")
+
+        call_args = mock_client.stream.call_args
+        self.assertEqual(call_args.args[0], "GET")
+        self.assertEqual(call_args.args[1], "https://generativelanguage.googleapis.com/v1beta/models")
+        self.assertNotIn(sentinel_key, call_args.args[1])
+        self.assertEqual(call_args.kwargs["headers"].get("x-goog-api-key"), sentinel_key)
+
+    @patch("alvea.ai.providers.time.sleep")
+    @patch("alvea.ai.providers.validate_outbound_url", side_effect=lambda u, **kw: u)
+    @patch("alvea.ai.providers.httpx.Client")
+    def test_gemini_retries_once_on_503_overload(
+        self, mock_client_cls: MagicMock, _mock_ssrf: MagicMock, _mock_sleep: MagicMock
+    ) -> None:
+        resp_503 = MagicMock()
+        resp_503.status_code = 503
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.iter_bytes.return_value = [b'{"candidates":[{"content":{"parts":[{"text":"{\\"ok\\":true}"}]}}]}']
+
+        cm_503 = MagicMock()
+        cm_503.__enter__.return_value = resp_503
+        cm_200 = MagicMock()
+        cm_200.__enter__.return_value = resp_200
+
+        mock_client = MagicMock()
+        mock_client.stream.side_effect = [cm_503, cm_200]
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+
+        provider = get_provider("gemini")
+        assert provider is not None
+        text, _ = call_llm_provider(
+            provider=provider,
+            model_id="gemini-2.5-flash-lite",
+            system_prompt="sys",
+            user_prompt="usr",
+            json_schema={},
+            mode="json_object",
+            api_key="AIzaSyRETRY_503_TEST_9999999",
+        )
+        self.assertEqual(text, '{"ok":true}')
+        self.assertEqual(mock_client.stream.call_count, 2)
 
 
 if __name__ == "__main__":

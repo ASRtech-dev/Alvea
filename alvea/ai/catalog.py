@@ -135,8 +135,9 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         models=(
             ModelSpec("gemini-3.8-flash", "Gemini 3.8 Flash", ("Free", "Recommended"), "json_schema", False, False, True),
             ModelSpec("gemini-3.5-flash", "Gemini 3.5 Flash", ("Free", "Stable"), "json_schema", False, False, False),
-            ModelSpec("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite", ("Free", "Ultra-fast"), "json_schema", False, False, False),
-            ModelSpec("gemini-2.5-flash", "Gemini 2.5 Flash", ("Free", "Classic"), "json_schema", False, False, False),
+            ModelSpec("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite", ("Free", "Ultra-fast"), "json_schema", False, False, False),
+            ModelSpec("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite", ("Free", "High Availability"), "json_schema", False, False, False),
+            ModelSpec("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview", ("Free", "Reasoning"), "json_schema", False, False, False),
         ),
     ),
     ProviderSpec(
