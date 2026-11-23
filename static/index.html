@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <script src="/theme-init.js"></script>
+  <title>ALVEA — Estudio de Arquitectura e Inteligencia de Procesos</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+  <!-- Encabezado Ejecutivo -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="9" y2="12"></line>
+          <line x1="15" y1="12" x2="21" y2="12"></line>
+          <polygon points="12 9 15 12 12 15 9 12"></polygon>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </div>
+      <div class="brand-copy">
+        <div class="brand-title-row">
+          <span class="brand-name">ALVEA</span>
+          <span class="badge badge--brand" id="backend-badge">Python + NetworkX</span>
+        </div>
+        <p class="brand-subtitle">De la narrativa operativa a la arquitectura ejecutiva</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="btn-group" role="group" aria-label="Historial de versiones">
+        <button class="btn btn-icon btn-sm" id="btn-undo" type="button" title="Deshacer (Ctrl+Z)" disabled aria-label="Deshacer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
+        </button>
+        <button class="btn btn-icon btn-sm" id="btn-redo" type="button" title="Rehacer (Ctrl+Shift+Z)" disabled aria-label="Rehacer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg>
+        </button>
+        <button class="btn btn-outline btn-sm" id="btn-history" type="button" title="Ver historial de versiones">
+          Historial (<span id="history-count">0</span>)
+        </button>
+      </div>
+
+      <button class="btn btn-outline btn-sm" id="btn-config-ai" type="button" title="Configurar claves y endpoints de IA">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        Proveedores IA
+      </button>
+
+      <button class="btn btn-outline btn-sm" id="btn-view-prompt" type="button" title="Inspeccionar System Prompt">
+        Prompt
+      </button>
+
+      <a class="btn btn-outline btn-sm" href="/ejemplo.html" target="_blank" rel="noopener noreferrer" title="Abrir visor standalone de ejemplo">
+        Visor Ejemplo
+      </a>
+
+      <button class="btn btn-icon btn-sm" id="btn-shortcuts" type="button" title="Atajos de teclado (?)" aria-label="Atajos de teclado">?</button>
+
+      <button class="btn btn-outline btn-sm theme-toggle" id="btn-theme-toggle" type="button" title="Cambiar esquema de color (Sistema / Claro / Oscuro)" aria-label="Cambiar tema">
+        <span id="theme-label">Sistema</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Cuerpo Principal (Layout de 2 columnas con 100dvh) -->
+  <main class="app-shell">
+
+    <!-- Panel Izquierdo: Narrativa, Proveedores y Marco Cognitivo -->
+    <aside class="sidebar" aria-label="Configuración del proceso">
+
+      <!-- Escenarios Corporativos -->
+      <section class="panel-card">
+        <label class="field-label" for="example-select">Escenario Corporativo</label>
+        <select id="example-select" class="field-control">
+          <option value="credito">1. Crédito de Consumo Móvil (Banca Digital)</option>
+          <option value="compras">2. Licitación y Compras Estratégicas (Procurement)</option>
+          <option value="incidentes">3. Gestión de Incidentes Críticos IT (DevOps / ITIL)</option>
+          <option value="onboarding">4. Selección y Contratación de Personal (RRHH)</option>
+          <option value="viaticos">5. Rendición de Viáticos y Reembolso (Finanzas)</option>
+          <option value="custom">— Escribir proceso personalizado desde cero —</option>
+        </select>
+      </section>
+
+      <!-- Narrativa del Proceso -->
+      <section class="panel-card">
+        <div class="card-header">
+          <label class="field-label" for="process-description">Narrativa del Proceso</label>
+          <button class="btn btn-ghost btn-xs" id="btn-clear-text" type="button">Limpiar</button>
+        </div>
+        <textarea
+          id="process-description"
+          class="field-control field-textarea"
+          rows="6"
+          placeholder="Describe cualquier proceso de negocio en español o inglés: actores, validaciones, decisiones (Si... / De lo contrario...) y devoluciones..."
+        ></textarea>
+        <div class="field-meta">
+          <span id="char-counter" class="tabular-nums">0 caracteres</span>
+          <span>Ctrl + Enter para generar</span>
+        </div>
+      </section>
+
+      <!-- Selector Moderno de Proveedor + Modelo + Orientación -->
+      <section class="panel-card">
+        <div class="card-header">
+          <span class="field-label">Motor e Inteligencia</span>
+          <span class="credential-pill" id="credential-status">Sin clave requerida</span>
+        </div>
+
+        <div class="form-stack">
+          <div>
+            <label class="sub-label" for="provider-select">Proveedor</label>
+            <select id="provider-select" class="field-control"></select>
+          </div>
+
+          <div class="model-row">
+            <div class="model-select-wrap">
+              <label class="sub-label" for="model-select">Modelo</label>
+              <select id="model-select" class="field-control"></select>
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-discover-models" type="button" hidden title="Consultar modelos instalados localmente">
+              Autodescubrir
+            </button>
+          </div>
+
+          <div class="badge-row" id="provider-badges"></div>
+          <p class="provider-note" id="provider-note"></p>
+        </div>
+
+        <!-- Orientación + Camino Crítico -->
+        <div class="layout-controls">
+          <fieldset class="segmented-control" aria-label="Orientación del diagrama">
+            <legend class="sr-only">Orientación del diagrama</legend>
+            <label class="seg-item">
+              <input type="radio" name="direction" value="LR" checked>
+              <span>Horizontal (LR)</span>
+            </label>
+            <label class="seg-item">
+              <input type="radio" name="direction" value="TD">
+              <span>Vertical (TD)</span>
+            </label>
+          </fieldset>
+
+          <label class="checkbox-inline">
+            <input type="checkbox" id="chk-critical-path">
+            <span>Resaltar Camino Crítico</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Acción Principal -->
+      <button class="btn btn-primary btn-generate" id="btn-generate" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        <span id="btn-generate-label">Generar Arquitectura</span>
+      </button>
+
+      <!-- Marco Cognitivo Dinámico (Fases A, B, C) -->
+      <details class="panel-card cognitive-card" open>
+        <summary class="card-header summary-toggle">
+          <span class="field-label">Marco Cognitivo BPA</span>
+          <span class="badge badge--subtle">Fases A · B · C</span>
+        </summary>
+
+        <div class="cognitive-body">
+          <div class="cog-phase">
+            <div class="cog-title">Fase A · Actores / Carriles</div>
+            <div class="actor-chips" id="actor-chips-container"></div>
+          </div>
+          <div class="cog-phase">
+            <div class="cog-title">Fase B · Compuertas de Decisión</div>
+            <ul class="cog-list" id="cognitive-decisions-list"></ul>
+          </div>
+          <div class="cog-phase">
+            <div class="cog-title">Fase C · Rutas, Bucles y Optimización</div>
+            <p class="cog-text" id="cognitive-routes-text"></p>
+          </div>
+        </div>
+      </details>
+
+    </aside>
+
+    <!-- Panel Derecho: Estudio Visual, Métricas NetworkX, Editor y Reporte -->
+    <section class="studio-viewport" aria-label="Estudio visual y diagnóstico">
+
+      <!-- Toolbar Principal -->
+      <div class="viewport-toolbar">
+        <div class="tab-nav" role="tablist" aria-label="Vistas del estudio">
+          <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="view-visual" id="tab-visual" data-tab="visual" type="button">Diagrama</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-editor" id="tab-editor" data-tab="editor" type="button">Código Mermaid</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-report" id="tab-report" data-tab="report" type="button">Reporte Ejecutivo</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-data" id="tab-data" data-tab="data" type="button">Modelo YAML / JSON</button>
+        </div>
+
+        <div class="toolbar-actions">
+          <div class="zoom-group" role="group" aria-label="Controles de zoom">
+            <button class="zoom-btn" id="btn-zoom-out" type="button" title="Alejar (-)">−</button>
+            <span class="zoom-value tabular-nums" id="zoom-label">100%</span>
+            <button class="zoom-btn" id="btn-zoom-in" type="button" title="Acercar (+)">+</button>
+            <button class="zoom-btn" id="btn-zoom-reset" type="button" title="Tamaño real (0)">1:1</button>
+            <button class="zoom-btn" id="btn-zoom-fit" type="button" title="Ajustar a pantalla (F)">Ajustar</button>
+          </div>
+
+          <button class="btn btn-outline btn-sm" id="btn-copy-mermaid" type="button" title="Copiar sintaxis Mermaid">Copiar</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-svg" type="button" title="Descargar SVG vectorial">SVG</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-png" type="button" title="Descargar PNG HD (3x)">PNG HD</button>
+          <button class="btn btn-primary btn-sm" id="btn-export-pdf" type="button" title="Descargar Reporte Ejecutivo en PDF (ReportLab)">PDF</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-yaml" type="button" title="Descargar especificación YAML">YAML</button>
+          <button class="btn btn-icon btn-sm" id="btn-fullscreen" type="button" title="Pantalla completa" aria-label="Pantalla completa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Banda de Métricas NetworkX en Vivo -->
+      <div class="metrics-strip" id="metrics-strip" aria-label="Métricas estructurales NetworkX">
+        <div class="kpi-grid">
+          <div class="kpi-item">
+            <span class="kpi-label">Grado</span>
+            <span class="kpi-value kpi-grade tabular-nums" id="kpi-grade">—</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">Carriles</span>
+            <span class="kpi-value tabular-nums" id="kpi-lanes">0</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">Nodos / Aristas</span>
+            <span class="kpi-value tabular-nums" id="kpi-nodes">0 / 0</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">Complejidad</span>
+            <span class="kpi-value tabular-nums" id="kpi-complexity">—</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">Automatización</span>
+            <span class="kpi-value tabular-nums" id="kpi-auto">0%</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">Bucles</span>
+            <span class="kpi-value tabular-nums" id="kpi-cycles">0</span>
+          </div>
+          <div class="kpi-item">
+            <span class="kpi-label">Camino Crítico</span>
+            <span class="kpi-value tabular-nums" id="kpi-critical">0 pasos</span>
+          </div>
+          <div class="kpi-item kpi-item--wide">
+            <span class="kpi-label">Cuello de Botella Principal</span>
+            <span class="kpi-value kpi-truncate" id="kpi-bottleneck">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vista 1: Lienzo Interactivo -->
+      <div class="view-pane canvas-pane" id="view-visual" role="tabpanel" aria-labelledby="tab-visual">
+        <div class="diagram-viewport" id="diagram-viewport">
+          <div class="diagram-sheet" id="mermaid-target"></div>
+        </div>
+      </div>
+
+      <!-- Vista 2: Editor Mermaid en Vivo -->
+      <div class="view-pane editor-pane" id="view-editor" role="tabpanel" aria-labelledby="tab-editor" hidden>
+        <div class="pane-bar">
+          <span class="pane-title">Editor Mermaid.js con Validación, Sanitización y Recálculo NetworkX</span>
+          <div class="btn-group">
+            <button class="btn btn-outline btn-sm" id="btn-repair-editor" type="button">Validar y Reparar</button>
+            <button class="btn btn-primary btn-sm" id="btn-apply-editor" type="button">Aplicar al Diagrama (Ctrl+S)</button>
+          </div>
+        </div>
+        <div class="validation-banner" id="validation-banner" hidden></div>
+        <textarea id="mermaid-code-input" class="code-editor" spellcheck="false" aria-label="Código Mermaid"></textarea>
+      </div>
+
+      <!-- Vista 3: Reporte Ejecutivo Dinámico (Construcción DOM 100% libre de XSS) -->
+      <div class="view-pane report-pane" id="view-report" role="tabpanel" aria-labelledby="tab-report" hidden>
+        <div class="report-document" id="report-container"></div>
+      </div>
+
+      <!-- Vista 4: Modelo Estructurado YAML / JSON + Importación -->
+      <div class="view-pane data-pane" id="view-data" role="tabpanel" aria-labelledby="tab-data" hidden>
+        <div class="pane-bar">
+          <span class="pane-title">Modelo Canónico ProcessGraph + Métricas NetworkX</span>
+          <div class="btn-group">
+            <button class="btn btn-outline btn-sm" id="btn-download-json" type="button">Descargar JSON</button>
+            <button class="btn btn-outline btn-sm" id="btn-download-yaml-2" type="button">Descargar YAML</button>
+            <label class="btn btn-primary btn-sm file-btn">
+              Importar YAML
+              <input type="file" id="input-import-yaml" class="sr-only" accept=".yaml,.yml">
+            </label>
+          </div>
+        </div>
+        <pre class="data-preview" id="data-preview"></pre>
+      </div>
+
+      <!-- Barra de Estado Inferior -->
+      <footer class="status-bar">
+        <div class="status-left" role="status" aria-live="polite">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Inicializando ALVEA…</span>
+        </div>
+        <div class="status-right tabular-nums">
+          <span id="telemetry-text">Motor Nativo Python</span>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <!-- Modal 1: Configuración de Proveedores IA (Zero Persistence en servidor) -->
+  <dialog class="studio-dialog" id="modal-ai" closedby="any" aria-labelledby="modal-ai-title">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="modal-ai-title">Proveedores de IA y Claves</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-ai" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <p class="dialog-intro">
+        Las claves se guardan únicamente en memoria de esta pestaña por defecto (o en <code>sessionStorage</code> si lo activas).
+        Nunca se persisten en disco en el servidor ni se envían en parámetros URL.
+      </p>
+
+      <div class="form-stack">
+        <div>
+          <label class="sub-label" for="modal-provider-select">Proveedor a configurar</label>
+          <select id="modal-provider-select" class="field-control"></select>
+        </div>
+
+        <div id="modal-apikey-group">
+          <label class="sub-label" for="modal-api-key">API Key / Token</label>
+          <div class="input-inline">
+            <input type="password" id="modal-api-key" class="field-control" autocomplete="off" placeholder="Pega tu clave del proveedor...">
+            <button class="btn btn-outline btn-sm" id="btn-toggle-key" type="button">Mostrar</button>
+          </div>
+        </div>
+
+        <div id="modal-baseurl-group" hidden>
+          <label class="sub-label" for="modal-base-url">URL del Endpoint (Local o HTTPS personalizado)</label>
+          <input type="url" id="modal-base-url" class="field-control" placeholder="http://127.0.0.1:11434">
+          <p class="hint-text">Solo se permiten direcciones loopback (127.0.0.1 / localhost) o HTTPS públicos verificados contra SSRF.</p>
+        </div>
+
+        <label class="checkbox-inline">
+          <input type="checkbox" id="chk-session-persist">
+          <span>Mantener claves durante esta sesión del navegador (sessionStorage)</span>
+        </label>
+
+        <label class="checkbox-inline">
+          <input type="checkbox" id="chk-native-fallback" checked>
+          <span>Usar Motor Nativo Python automáticamente si un proveedor cloud falla por red/cuota</span>
+        </label>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-outline btn-sm" id="btn-clear-provider-key" type="button">Borrar clave</button>
+      <button class="btn btn-primary btn-sm" id="btn-save-provider-cfg" type="button">Guardar</button>
+    </div>
+  </dialog>
+
+  <!-- Modal 2: Prompt del Sistema -->
+  <dialog class="studio-dialog studio-dialog--wide" id="modal-prompt" closedby="any" aria-labelledby="modal-prompt-title">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="modal-prompt-title">System Prompt de Arquitectura BPA</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-prompt" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <p class="dialog-intro">Prompt estructurado utilizado por ALVEA para generar el contrato canónico <code>ProcessGraph</code> en proveedores LLM:</p>
+      <pre class="code-pre" id="prompt-content"></pre>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-outline btn-sm" id="btn-copy-prompt" type="button">Copiar Prompt</button>
+      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-prompt">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Modal 3: Historial de Versiones -->
+  <dialog class="studio-dialog" id="modal-history" closedby="any" aria-labelledby="modal-history-title">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="modal-history-title">Historial de Versiones (Sesión)</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-history" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <div class="history-list" id="history-list"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-history">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Modal 4: Atajos de Teclado -->
+  <dialog class="studio-dialog" id="modal-shortcuts" closedby="any" aria-labelledby="modal-shortcuts-title">
+    <div class="dialog-header">
+      <h2 class="dialog-title" id="modal-shortcuts-title">Atajos de Teclado</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-shortcuts" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="dialog-body">
+      <ul class="shortcuts-list">
+        <li><kbd>Ctrl / Cmd + Enter</kbd><span>Generar arquitectura desde la narrativa</span></li>
+        <li><kbd>Ctrl / Cmd + S</kbd><span>Aplicar cambios del editor o descargar SVG</span></li>
+        <li><kbd>Ctrl / Cmd + Z</kbd><span>Deshacer última versión</span></li>
+        <li><kbd>Ctrl / Cmd + Shift + Z</kbd><span>Rehacer versión</span></li>
+        <li><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd> / <kbd>F</kbd><span>Acercar, alejar, 1:1 y ajustar a pantalla</span></li>
+        <li><kbd>?</kbd><span>Mostrar esta ayuda de atajos</span></li>
+      </ul>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-shortcuts">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Contenedor de notificaciones accesibles -->
+  <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Mermaid local 100% offline (sin scripts inline ni document.write) -->
+  <script src="/vendor/mermaid.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

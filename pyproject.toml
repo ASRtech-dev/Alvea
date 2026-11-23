@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alvea"
+version = "2.0.0"
+description = "ALVEA — Estudio de Arquitectura e Inteligencia de Procesos (Python, NetworkX, Mermaid.js y Multi-LLM)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "ASRtech-dev" }]
+license = { text = "MIT" }
+keywords = ["bpa", "bpmn", "swimlane", "mermaid", "networkx", "process-mining", "ollama", "python"]
+dependencies = [
+    "pydantic>=2.7.0",
+    "networkx>=3.2",
+    "httpx>=0.27.0",
+    "reportlab>=4.2.0",
+    "PyYAML>=6.0",
+    "pillow>=10.0.0",
+]
+
+[project.scripts]
+alvea = "alvea.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["alvea*"]
