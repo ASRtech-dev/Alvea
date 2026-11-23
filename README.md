@@ -2,7 +2,7 @@
 
 > *"From operational narrative to executive architecture."*
 
-**ALVEA v3.0** is a clean, offline-first web studio backed by **Python**, **NetworkX** graph theory, **ReportLab** executive PDF generation, and a hybrid **Local / Multi-LLM** workflow engine. It converts free-form or structured process descriptions into executive **Mermaid.js Swimlane diagrams**, real-time structural diagnostics, and exportable architecture deliverables — with a built-in user guide directly inside the application.
+**ALVEA v3.1** is a clean, offline-first web studio backed by **Python**, **NetworkX** graph theory, **ReportLab** executive & SOP PDF generation, and a hybrid **Local / Multi-LLM / Custom API** workflow engine. It converts free-form or structured process descriptions into executive **Mermaid.js Swimlane diagrams**, real-time structural diagnostics, an **Executive Report**, and an ISO-style **Standard Operating Procedure (SOP)** — with live **Prompting Design coaching** and an offline user guide built directly into the application.
 
 ---
 
@@ -23,19 +23,19 @@
   * **Groq Cloud** (`llama-3.3-70b-versatile`, `qwen/qwen3.8-27b`, `openai/gpt-oss-120b`, `llama-3.1-8b-instant`).
   * **OpenRouter (`:free`)** (`openrouter/free`, `google/gemma-4-31b-it:free`, `google/gemma-4-26b-a4b-it:free`, `qwen/qwen3.8-27b:free`, `nvidia/nemotron-3.5-lightning:free`, `nvidia/nemotron-3-ultra-550b-a55b:free`).
   * **Cerebras Inference** (`qwen-3.8-27b`, `gpt-oss-120b`) and **GitHub Models**.
-* **BYOK Optional:** Mistral AI, OpenAI (`gpt-4.1`, `o4-mini`), Anthropic Claude (`tool_use`), and custom OpenAI-compatible endpoints.
+* **BYOK & Multi-Protocol Custom API Manager:** Configure built-in APIs (Google Gemini, Groq, OpenRouter, Cerebras, GitHub Models, Mistral, OpenAI, Anthropic) directly from the sidebar, test connectivity live (`POST /api/v1/providers/test`), or add unlimited named **Custom APIs** supporting `OpenAI-Compatible`, `Gemini`, `Anthropic`, and `Ollama` protocols with optional custom auth headers under strict SSRF and header-injection protection.
 * **5-Level Self-Repair Pipeline:** Strict JSON Schema -> automatic mode downgrade -> `<think>` stripping & local JSON repair -> single LLM self-repair -> Mermaid-to-Graph fallback -> optional offline Python fallback.
 
-### 2. Live NetworkX Graph Intelligence
-Every workflow — generated locally, via LLM, edited manually in Mermaid, or imported from YAML — is audited in real time:
-* **Weighted Critical Path** over condensed DAG (measured in minutes when explicit SLAs exist, or relative complexity points).
-* **Bottleneck Ranking** via betweenness centrality, incident handoff pressure, manual workload, and wait states.
-* **McCabe Cyclomatic Complexity**, automation coverage, cross-lane handoff ratio, rework cycles, structural anomalies, and operational Efficiency Grade (`A+` to `C`).
+### 2. Live NetworkX Graph Intelligence & Dual Formal Documents
+Every workflow — generated locally, via LLM, edited manually in Mermaid, or imported from YAML — produces **two formal deliverables**:
+* **Executive Report (Management Diagnostics + PDF):** Weighted Critical Path over condensed DAG (minutes when explicit SLAs exist, or relative complexity points), Bottleneck Ranking (betweenness centrality + handoff pressure + manual/wait risk), McCabe Cyclomatic Complexity, automation coverage, rework cycles, anomalies, and Efficiency Grade (`A+` to `C`).
+* **Standard Operating Procedure — SOP Document (`SOP Document` tab + SOP PDF & Markdown `.md`):** Deterministic ISO-style runbook computed via Kahn priority-queue topological ordering, featuring hierarchical parallel step numbering (`3a`, `3b`), Roles & Responsibilities matrix, step-by-step instructions with exact cross-step routing & rework loop references (`Return to Step 2`), Decision Matrix, and SLA Controls.
 
-### 3. Clean Editorial Studio & Built-In Documentation
+### 3. Clean Editorial Studio, Prompting Coach & Built-In Documentation
 * Clean blank-canvas workspace (no hardcoded sample business maps).
-* **Integrated User Guide (`Docs` tab / `Guide` header button)** covering syntax patterns, engines, NetworkX metrics, shortcuts, exports, and security — 100% available offline inside the app.
-* System / Light / Dark themes (`color-scheme: light dark` + `light-dark()`), Undo/Redo session history (30 versions), Horizontal (`LR`) / Vertical (`TD`) orientation toggle, Critical Path highlight, and exports to **PNG HD (3x)**, **SVG**, **Executive PDF (ReportLab)**, **YAML**, and **JSON**.
+* **Live Prompting Design Coach:** Real-time client-side completeness indicators (`Actors`, `Decisions`, `Durations`, `Outcomes`) with contextual phrasing tips right under the narrative editor, linked directly to a full **Prompting Design Best Practices** guide inside `Docs`.
+* **Integrated User Guide (`Docs` tab / `Guide` header button)** covering syntax patterns, prompting design, built-in & custom API setup, NetworkX metrics, Report/SOP exports, shortcuts, and security — 100% available offline.
+* System / Light / Dark themes (`color-scheme: light dark` + `light-dark()`), Undo/Redo session history (30 versions), Horizontal (`LR`) / Vertical (`TD`) orientation toggle, Critical Path highlight, and exports to **PNG HD (3x)**, **SVG**, **Executive PDF**, **SOP PDF**, **SOP Markdown (.md)**, **YAML**, and **JSON**.
 
 ---
 

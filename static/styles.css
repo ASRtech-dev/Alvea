@@ -145,6 +145,10 @@
   padding: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: var(--font-sans);
   background-color: var(--surface-canvas);
@@ -1493,4 +1497,268 @@ kbd {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* ─── v3.1 Prompting Design Coach ────────────────────────────────────────── */
+.prompt-coach {
+  margin-top: 0.25rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hairline);
+  background-color: var(--surface-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.coach-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.coach-title {
+  font-size: 0.69rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-brand);
+}
+
+.coach-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.coach-pill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.14rem 0.48rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-hairline);
+  background-color: var(--surface-canvas);
+  color: var(--ink-muted);
+  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.coach-pill--met {
+  background-color: color-mix(in srgb, var(--sem-start) 15%, transparent);
+  border-color: color-mix(in srgb, var(--sem-start) 40%, transparent);
+  color: var(--sem-start);
+}
+
+.coach-pill--met::before {
+  content: "✓ ";
+}
+
+.coach-tip {
+  font-size: 0.72rem;
+  color: var(--ink-secondary);
+  line-height: 1.42;
+}
+
+/* ─── v3.1 Clickable Credential Pill & Provider Quick Actions ────────────── */
+.credential-pill--btn {
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: filter 0.15s ease, border-color 0.15s ease;
+}
+
+.credential-pill--btn:hover {
+  filter: brightness(0.95);
+  border-color: currentColor;
+}
+
+.provider-quick-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.provider-hint {
+  font-size: 0.71rem;
+  color: var(--accent-brand);
+  line-height: 1.38;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--accent-brand) 9%, transparent);
+}
+
+/* ─── v3.1 API Manager Modal Enhancements ────────────────────────────────── */
+.modal-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 0.25rem;
+  background-color: var(--surface-subtle);
+  padding: 0.22rem;
+  border-radius: var(--radius-sm);
+}
+
+.custom-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+@media (max-width: 640px) {
+  .custom-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.advanced-auth-box {
+  padding: 0.55rem 0.7rem;
+  border: 1px dashed var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-canvas);
+}
+
+.advanced-auth-box > summary {
+  margin-bottom: 0;
+}
+
+.advanced-auth-box[open] > summary {
+  margin-bottom: 0.55rem;
+}
+
+.test-conn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.test-result {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-secondary);
+}
+
+.test-result--ok {
+  color: var(--sem-start);
+}
+
+.test-result--err {
+  color: var(--sem-end);
+}
+
+.custom-list-wrap {
+  margin-top: 0.35rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+/* ─── v3.1 SOP Document View ─────────────────────────────────────────────── */
+.sop-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sop-pane-bar {
+  padding: 0.75rem 1.25rem;
+  background-color: var(--surface-elevated);
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.sop-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.5rem 1.75rem;
+}
+
+.sop-document {
+  max-width: 960px;
+}
+
+.sop-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+@container (max-width: 680px) {
+  .sop-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sop-meta-cell {
+  background-color: var(--surface-canvas);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sop-step-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  color: var(--ink-primary);
+}
+
+.sop-step-num--cp {
+  color: var(--sem-critical);
+}
+
+.sop-mode-badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background-color: var(--surface-subtle);
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+
+.sop-mode-badge--auto {
+  background-color: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+  color: var(--accent-brand);
+}
+
+.sop-mode-badge--decision {
+  background-color: color-mix(in srgb, var(--sem-decision) 16%, transparent);
+  color: var(--sem-decision);
+}
+
+.sop-mode-badge--milestone {
+  background-color: color-mix(in srgb, var(--sem-start) 14%, transparent);
+  color: var(--sem-start);
+}
+
+.sop-route-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.sop-route-chip {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  background-color: var(--surface-canvas);
+  border: 1px solid var(--border-hairline);
+  color: var(--ink-secondary);
+}
+
+.sop-route-chip--loop {
+  background-color: color-mix(in srgb, var(--sem-end) 12%, transparent);
+  border-color: color-mix(in srgb, var(--sem-end) 35%, transparent);
+  color: var(--sem-end);
 }

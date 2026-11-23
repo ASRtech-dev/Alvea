@@ -99,6 +99,39 @@ class TestAIPipeline(unittest.TestCase):
         self.assertNotIn(sentinel_key, called_url)
         self.assertEqual(called_headers.get("x-goog-api-key"), sentinel_key)
 
+    @patch("alvea.ai.providers.validate_outbound_url", side_effect=lambda u, **kw: u)
+    @patch("alvea.ai.providers.httpx.Client")
+    def test_custom_protocol_anthropic_and_custom_auth_header(
+        self, mock_client_cls: MagicMock, _mock_ssrf: MagicMock
+    ) -> None:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_bytes.return_value = [b'{"content":[{"type":"text","text":"OK"}]}']
+
+        mock_client = MagicMock()
+        mock_client.stream.return_value.__enter__.return_value = mock_resp
+        mock_client_cls.return_value.__enter__.return_value = mock_client
+
+        provider = get_provider("custom_openai")
+        assert provider is not None
+        text, _ = call_llm_provider(
+            provider=provider,
+            model_id="claude-custom-1",
+            system_prompt="sys",
+            user_prompt="usr",
+            json_schema={},
+            mode="prompt_only",
+            api_key="my_custom_secret_token_999",
+            custom_base_url="https://api.example-gateway.com",
+            custom_protocol="anthropic",
+            custom_auth_header="X-Gateway-Key",
+            custom_auth_prefix="Token",
+        )
+        self.assertEqual(text, "OK")
+        call_args = mock_client.stream.call_args
+        self.assertEqual(call_args.args[1], "https://api.example-gateway.com/v1/messages")
+        self.assertEqual(call_args.kwargs["headers"].get("X-Gateway-Key"), "Token my_custom_secret_token_999")
+
 
 if __name__ == "__main__":
     unittest.main()

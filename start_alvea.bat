@@ -7,7 +7,7 @@ cd /d "%~dp0"
 
 echo.
 echo ========================================================
-echo   ALVEA v3.0 - Starting Process Architecture Studio...
+echo   ALVEA v3.1 - Starting Process Architecture Studio...
 echo ========================================================
 echo.
 

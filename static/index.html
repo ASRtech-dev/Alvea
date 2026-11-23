@@ -44,9 +44,10 @@
         </button>
       </div>
 
-      <button class="btn btn-outline btn-sm" id="btn-config-ai" type="button" title="Configure AI provider credentials &amp; endpoints">
+      <button class="btn btn-outline btn-sm" id="btn-config-ai" type="button" title="Configure built-in API keys &amp; add custom APIs">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        AI Providers
+        <span>API Keys &amp; Models</span>
+        <span class="badge badge--brand" id="api-key-count" hidden>0</span>
       </button>
 
       <button class="btn btn-outline btn-sm" id="btn-view-prompt" type="button" title="Inspect LLM System Prompt">
@@ -87,13 +88,28 @@
           <span id="char-counter" class="tabular-nums">0 characters</span>
           <span>Ctrl + Enter to generate</span>
         </div>
+
+        <!-- Live Prompting Design Coach -->
+        <div class="prompt-coach" id="prompt-coach" aria-live="polite">
+          <div class="coach-header">
+            <span class="coach-title">Prompting Coach</span>
+            <button class="btn btn-ghost btn-xs" id="btn-prompt-guide" type="button">Prompting Guide →</button>
+          </div>
+          <div class="coach-pills" role="list" aria-label="Workflow prompt completeness checks">
+            <span class="coach-pill" id="coach-actors" role="listitem" title="Name roles using 'Actor: Action' or 'A -> B: Action'">Actors</span>
+            <span class="coach-pill" id="coach-decisions" role="listitem" title="Add branches using 'If / Else if / Otherwise'">Decisions</span>
+            <span class="coach-pill" id="coach-durations" role="listitem" title="Add SLAs like '[30m]' or '[2h]' for cycle-time math">Durations</span>
+            <span class="coach-pill" id="coach-outcomes" role="listitem" title="Define explicit success/rejection end states">Outcomes</span>
+          </div>
+          <p class="coach-tip" id="coach-tip">Tip: Prefix steps with roles like "Finance: Review invoice [30m]" to generate clean swimlanes and SOP ownership.</p>
+        </div>
       </section>
 
       <!-- Provider + Model + Orientation -->
       <section class="panel-card">
         <div class="card-header">
           <span class="field-label">Engine &amp; Intelligence</span>
-          <span class="credential-pill" id="credential-status">No key required</span>
+          <button class="credential-pill credential-pill--btn" id="credential-status" type="button" title="Click to configure API key or endpoint">No key required</button>
         </div>
 
         <div class="form-stack">
@@ -112,8 +128,14 @@
             </button>
           </div>
 
+          <div class="provider-quick-actions">
+            <button class="btn btn-outline btn-xs" id="btn-sidebar-config-api" type="button">Configure API Key</button>
+            <button class="btn btn-outline btn-xs" id="btn-sidebar-add-custom" type="button">+ Add Custom API</button>
+          </div>
+
           <div class="badge-row" id="provider-badges"></div>
           <p class="provider-note" id="provider-note"></p>
+          <p class="provider-hint" id="provider-key-hint" hidden></p>
         </div>
 
         <div class="layout-controls">
@@ -180,6 +202,7 @@
           <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="view-visual" id="tab-visual" data-tab="visual" type="button">Diagram</button>
           <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-editor" id="tab-editor" data-tab="editor" type="button">Mermaid Code</button>
           <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-report" id="tab-report" data-tab="report" type="button">Executive Report</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-sop" id="tab-sop" data-tab="sop" type="button">SOP Document</button>
           <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-data" id="tab-data" data-tab="data" type="button">YAML / JSON</button>
           <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-docs" id="tab-docs" data-tab="docs" type="button">Docs</button>
         </div>
@@ -260,13 +283,13 @@
             <h1 class="empty-title">Start Your Process Architecture</h1>
             <p class="empty-lead">
               Write or paste any operational workflow in the left panel to generate a clean Mermaid.js swimlane diagram,
-              real-time NetworkX graph audit, and executive PDF report.
+              real-time NetworkX graph audit, Executive Report, and numbered Standard Operating Procedure (SOP).
             </p>
 
             <ol class="empty-steps">
               <li><strong>1. Describe workflow</strong><span>Free prose, lists, <code>Actor: Action</code>, or <code>A -&gt; B: Action</code></span></li>
-              <li><strong>2. Choose engine</strong><span>Offline Python v3 (instant) or local/free cloud LLMs</span></li>
-              <li><strong>3. Audit &amp; export</strong><span>NetworkX metrics, PNG 3x HD, SVG, PDF &amp; YAML</span></li>
+              <li><strong>2. Choose engine</strong><span>Offline Python v3, local LLMs, Gemini/Groq, or Custom APIs</span></li>
+              <li><strong>3. Audit &amp; export</strong><span>Executive PDF, SOP PDF/Markdown, PNG HD, SVG &amp; YAML</span></li>
             </ol>
 
             <div class="empty-syntax-strip" aria-label="Supported workflow patterns">
@@ -314,6 +337,23 @@
         </div>
       </div>
 
+      <!-- View 3b: Standard Operating Procedure (SOP) Document -->
+      <div class="view-pane sop-pane" id="view-sop" role="tabpanel" aria-labelledby="tab-sop" hidden>
+        <div class="pane-bar sop-pane-bar">
+          <span class="pane-title" id="sop-bar-title">Standard Operating Procedure (ISO-Style Operational Runbook)</span>
+          <div class="btn-group">
+            <button class="btn btn-outline btn-sm" id="btn-copy-sop-md" type="button" disabled>Copy Markdown</button>
+            <button class="btn btn-outline btn-sm" id="btn-export-sop-md" type="button" disabled>Download .md</button>
+            <button class="btn btn-primary btn-sm" id="btn-export-sop-pdf" type="button" disabled>Download SOP PDF</button>
+          </div>
+        </div>
+        <div class="sop-scroll">
+          <div class="report-document sop-document" id="sop-container">
+            <p class="dialog-intro">No Standard Operating Procedure generated yet. Generate a workflow architecture (or import YAML) to automatically compile a numbered, role-assigned SOP ready for PDF and Markdown export.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- View 4: Structured YAML / JSON & Import -->
       <div class="view-pane data-pane" id="view-data" role="tabpanel" aria-labelledby="tab-data" hidden>
         <div class="pane-bar">
@@ -337,20 +377,22 @@
             <div class="docs-toc-title">ALVEA User Guide</div>
             <a href="#doc-quickstart">1. Quick Start</a>
             <a href="#doc-syntax">2. Writing Workflows</a>
-            <a href="#doc-engines">3. Engines &amp; Models</a>
-            <a href="#doc-metrics">4. NetworkX Metrics</a>
-            <a href="#doc-exports">5. Editor, Shortcuts &amp; Exports</a>
-            <a href="#doc-security">6. Security &amp; Privacy</a>
+            <a href="#doc-prompting">3. Prompting Design</a>
+            <a href="#doc-engines">4. Engines &amp; Custom APIs</a>
+            <a href="#doc-metrics">5. NetworkX Metrics</a>
+            <a href="#doc-exports">6. Report, SOP &amp; Exports</a>
+            <a href="#doc-security">7. Security &amp; Privacy</a>
           </nav>
 
           <article class="docs-article">
             <header class="docs-hero">
-              <span class="badge badge--brand">Built-In Offline Reference · v3.0</span>
+              <span class="badge badge--brand">Built-In Offline Reference · v3.1</span>
               <h1 id="docs-main-heading" tabindex="-1">How to Use ALVEA</h1>
               <p>
                 ALVEA transforms plain-text or structured operational descriptions into executive
                 <strong>Mermaid.js Swimlane diagrams</strong>, live <strong>NetworkX graph analytics</strong>,
-                and exportable <strong>PDF / YAML / JSON</strong> deliverables.
+                an <strong>Executive Report</strong>, and a numbered <strong>Standard Operating Procedure (SOP)</strong> —
+                exportable to PDF, Markdown, SVG, PNG HD, YAML, and JSON.
               </p>
             </header>
 
@@ -424,46 +466,85 @@
               </ul>
             </section>
 
+            <section class="docs-section" id="doc-prompting">
+              <h2>3. Prompting Design Best Practices</h2>
+              <p>
+                Whether you use ALVEA's instant offline Python engine or a cloud/local LLM (Gemini, Groq, OpenRouter, Ollama, or a Custom API),
+                how you phrase your workflow dramatically improves swimlane accuracy, critical-path timing, and SOP clarity.
+              </p>
+
+              <h3>The 5 Golden Rules for High-Precision Workflow Prompts</h3>
+              <ol class="docs-list">
+                <li><strong>Name Roles Explicitly (One Actor per Step):</strong> Start clauses with who performs the action (e.g., <code>Applicant: Submit form</code> or <code>ERP System: Validate stock</code>) instead of passive voice (<em>"the form is checked"</em>). Consistent role names prevent duplicate swimlanes.</li>
+                <li><strong>Use Action Verbs &amp; Specific Systems:</strong> Distinguish human tasks (<em>"Manager approves"</em>) from automated services (<em>"Billing API generates invoice"</em>) so ALVEA accurately computes your Automation Ratio and draws System cylinders.</li>
+                <li><strong>Write Exhaustive Branches (If / Else If / Otherwise):</strong> Always state both the happy path and the rejection/escalation path (e.g., <code>If score &gt;= 700, Underwriting approves. Otherwise, System notifies rejection.</code>).</li>
+                <li><strong>Declare Concurrency &amp; Rework Loops Clearly:</strong> Use <code>In parallel:</code> with bullets for simultaneous tracks, and <code>returns to [Role/Step]</code> for correction loops so NetworkX detects cycles and the SOP cross-references exact step numbers.</li>
+                <li><strong>Embed SLA Durations &amp; Terminal States:</strong> Attach timings like <code>[15m]</code>, <code>[4h]</code>, or <code>[2d]</code> and state explicit end milestones (<em>"Order Fulfilled"</em>, <em>"Ticket Closed"</em>) so NetworkX computes real cycle times in minutes.</li>
+              </ol>
+
+              <h3>Weak Prompt vs. High-Precision Prompt</h3>
+              <table class="report-table">
+                <thead>
+                  <tr>
+                    <th>Weak (Ambiguous)</th>
+                    <th>Strong (Architecture &amp; SOP Ready)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><em>"A request comes in, gets reviewed, maybe approved or sent back, and then finished."</em></td>
+                    <td><code>Requester -&gt; Portal: Submit request [10m]. Manager: Review budget [2h]. If approved, in parallel: - Finance: Issue PO [1h] - IT: Provision license [30m]. Then Portal: Notify completion. If incomplete, returns to Requester to fix. Otherwise, Manager: Reject and archive.</code></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3>Engine-Specific Prompting Tips</h3>
+              <ul class="docs-list">
+                <li><strong>Native Python Engine v3 (Offline):</strong> Prefers crisp sentences, bulleted <code>In parallel:</code> blocks, explicit <code>Actor: Action [duration]</code>, and clear <code>If / Else if / Otherwise</code> clauses.</li>
+                <li><strong>Cloud &amp; Local LLMs (Gemini, Groq, Ollama, Custom APIs):</strong> Excel at distilling long meeting notes, raw policies, or messy email threads into clean Swimlanes. Tip: add one opening line stating <code>Process Title: ...</code> and <code>Main Roles: ...</code> at the top of messy notes for even tighter output.</li>
+              </ul>
+            </section>
+
             <section class="docs-section" id="doc-engines">
-              <h2>3. Processing Engines &amp; Models</h2>
+              <h2>4. Processing Engines, Built-In APIs &amp; Custom APIs</h2>
               <table class="report-table">
                 <thead>
                   <tr>
                     <th>Category</th>
                     <th>Providers</th>
-                    <th>Best Used For</th>
+                    <th>How to Configure</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td><strong>100% Offline (No API)</strong></td>
                     <td>Native Python BPA Engine v3</td>
-                    <td>Instant (&lt;10 ms) deterministic parsing with zero internet and complete confidentiality.</td>
+                    <td>Ready immediately — zero keys, zero internet, &lt;10 ms deterministic parsing.</td>
                   </tr>
                   <tr>
                     <td><strong>Local LLMs (No Cloud)</strong></td>
                     <td>Ollama (<code>127.0.0.1:11434</code>), LM Studio (<code>127.0.0.1:1234/v1</code>)</td>
-                    <td>Deep reasoning on messy prose locally. Click <strong>Auto-Discover</strong> to load your installed models automatically.</td>
+                    <td>Start Ollama or LM Studio locally, select it in the sidebar, and click <strong>Auto-Discover</strong>.</td>
                   </tr>
                   <tr>
-                    <td><strong>Free Cloud Tiers (2026)</strong></td>
-                    <td>Google Gemini, Groq, OpenRouter (<code>:free</code>), Cerebras, GitHub Models</td>
-                    <td>Complex unstructured documents using free developer API keys. Open <strong>AI Providers</strong> in the top bar to set a key.</td>
+                    <td><strong>Built-In Cloud APIs</strong></td>
+                    <td>Google Gemini, Groq, OpenRouter (<code>:free</code>), Cerebras, GitHub Models, Mistral, OpenAI, Anthropic</td>
+                    <td>Select the provider in the sidebar and click <strong>Configure API Key</strong> (or the amber key status pill), paste your key, click <strong>Test Connection</strong>, and save.</td>
                   </tr>
                   <tr>
-                    <td><strong>BYOK / Custom</strong></td>
-                    <td>Mistral AI, OpenAI, Anthropic Claude, Custom OpenAI-Compatible</td>
-                    <td>Enterprise API keys or internal HTTPS/loopback vLLM/LiteLLM gateways.</td>
+                    <td><strong>Custom APIs (Any Vendor)</strong></td>
+                    <td>DeepSeek, Together, Fireworks, LiteLLM, vLLM, Azure/Proxy gateways, custom Gemini/Anthropic/Ollama endpoints</td>
+                    <td>Click <strong>+ Add Custom API</strong> in the sidebar (or in <em>API Keys &amp; Models</em>), choose the protocol (<code>OpenAI-Compatible</code>, <code>Gemini</code>, <code>Anthropic</code>, or <code>Ollama</code>), enter your Base URL &amp; Model ID, test, and save.</td>
                   </tr>
                 </tbody>
               </table>
               <p>
-                Every LLM response passes through ALVEA's <strong>5-level self-repair pipeline</strong> (strict JSON Schema, automatic mode downgrade, <code>&lt;think&gt;</code> stripping, single self-repair pass, and Mermaid-to-Graph fallback) so downstream NetworkX analytics always work.
+                Every LLM response passes through ALVEA's <strong>5-level self-repair pipeline</strong> (strict JSON Schema, automatic mode downgrade, <code>&lt;think&gt;</code> stripping, single self-repair pass, and Mermaid-to-Graph fallback) so downstream NetworkX analytics and SOP generation always work.
               </p>
             </section>
 
             <section class="docs-section" id="doc-metrics">
-              <h2>4. NetworkX Graph Intelligence Metrics</h2>
+              <h2>5. NetworkX Graph Intelligence Metrics</h2>
               <ul class="docs-list">
                 <li><strong>Efficiency Grade (<code>A+</code> to <code>C</code>):</strong> composite operational score combining automation coverage, inter-lane handoff friction, rework cycles, complexity, and structural anomalies.</li>
                 <li><strong>Cyclomatic Complexity (<code>M = E - N + 2P</code>):</strong> measures decision branching density (<em>Low</em> ≤ 4, <em>Moderate</em> 5–10, <em>High</em> &gt; 10).</li>
@@ -475,16 +556,21 @@
             </section>
 
             <section class="docs-section" id="doc-exports">
-              <h2>5. Live Editor, Keyboard Shortcuts &amp; Exports</h2>
+              <h2>6. Executive Report, SOP Document, Shortcuts &amp; Exports</h2>
+              <p>
+                ALVEA automatically generates <strong>two complementary formal documents</strong> for every workflow:
+                the <strong>Executive Report</strong> (for management diagnostics, bottlenecks, and ROI recommendations) and the
+                <strong>SOP Document</strong> (an ISO-style Standard Operating Procedure with topological step numbering, parallel track indexing like <code>3a / 3b</code>, role ownership, decision routing, rework loop references, and SLA controls).
+              </p>
               <p>
                 Editing syntax in the <strong>Mermaid Code</strong> tab and clicking <strong>Apply to Diagram</strong> (or <code>Ctrl + S</code>)
-                sanitizes the syntax, re-parses the diagram back into a <code>ProcessGraph</code>, and recalculates all NetworkX metrics and the Executive Report automatically.
+                sanitizes the syntax, re-parses the diagram back into a <code>ProcessGraph</code>, and recalculates NetworkX metrics, the Executive Report, and the SOP Document automatically.
               </p>
               <ul class="docs-list">
-                <li><strong>PNG HD (3x):</strong> native SVG-to-Canvas rasterization with zero <code>foreignObject</code> / tainted-canvas failures.</li>
-                <li><strong>SVG:</strong> clean standalone vector graphic with explicit dimensions and crisp background.</li>
-                <li><strong>Executive PDF:</strong> multipage ReportLab document embedding KPI cards, swimlane visual, workload table, cognitive phases, NetworkX findings, recommendations, and Mermaid appendix.</li>
-                <li><strong>YAML / JSON:</strong> full canonical process bundle supporting round-trip <strong>Import YAML</strong> to reload saved architectures later.</li>
+                <li><strong>Executive PDF:</strong> multipage ReportLab management report with KPI cards, swimlane visual, workload table, cognitive phases, NetworkX findings, recommendations, and Mermaid source.</li>
+                <li><strong>SOP PDF &amp; SOP Markdown (.md):</strong> operational runbook ready for team onboarding, Notion/Confluence wikis, or compliance binders.</li>
+                <li><strong>PNG HD (3x) &amp; SVG:</strong> crisp vector and high-resolution raster diagrams with zero <code>foreignObject</code> issues.</li>
+                <li><strong>YAML / JSON:</strong> full canonical process bundle supporting round-trip <strong>Import YAML</strong>.</li>
               </ul>
               <div class="docs-shortcuts-grid">
                 <div><kbd>Ctrl / Cmd + Enter</kbd> Generate architecture</div>
@@ -497,7 +583,7 @@
             </section>
 
             <section class="docs-section" id="doc-security">
-              <h2>6. Security &amp; Privacy Architecture</h2>
+              <h2>7. Security &amp; Privacy Architecture</h2>
               <ul class="docs-list">
                 <li><strong>Zero Server-Side Key Persistence:</strong> API keys live in browser RAM by default (optional <code>sessionStorage</code>), are sent only via HTTP headers (never in URL query strings), wrapped in <code>SecretStr</code>, and automatically redacted from logs.</li>
                 <li><strong>SSRF Protection:</strong> cloud providers are pinned to an HTTPS-only allowlist; local LLMs are restricted to loopback (<code>127.0.0.1</code> / <code>localhost</code> / <code>::1</code>) with DNS rebinding, IMDS (<code>169.254.169.254</code>), and redirect blocking.</li>
@@ -522,22 +608,29 @@
     </section>
   </main>
 
-  <!-- Modal 1: AI Providers & Credentials -->
-  <dialog class="studio-dialog" id="modal-ai" closedby="any" aria-labelledby="modal-ai-title">
+  <!-- Modal 1: API Keys, Built-In Providers & Custom API Manager -->
+  <dialog class="studio-dialog studio-dialog--wide" id="modal-ai" closedby="any" aria-labelledby="modal-ai-title">
     <div class="dialog-header">
-      <h2 class="dialog-title" id="modal-ai-title">AI Providers &amp; Credentials</h2>
+      <h2 class="dialog-title" id="modal-ai-title">API Keys &amp; Custom API Manager</h2>
       <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-ai" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body">
       <p class="dialog-intro">
-        API keys are kept strictly in browser memory by default (or optional <code>sessionStorage</code>).
-        They are never written to server disk and never transmitted in URL query parameters.
+        Configure built-in providers (Google Gemini, Groq, OpenRouter, OpenAI, Anthropic, Ollama…) or add your own Custom API endpoints.
+        API keys stay strictly in browser RAM by default (or optional <code>sessionStorage</code>) and are never saved to server disk or <code>localStorage</code>.
       </p>
 
-      <div class="form-stack">
+      <div class="modal-tabs" role="tablist" aria-label="API configuration mode">
+        <button class="tab-btn active" id="ai-tab-builtin" role="tab" aria-selected="true" aria-controls="ai-panel-builtin" type="button">Built-in APIs</button>
+        <button class="tab-btn" id="ai-tab-custom" role="tab" aria-selected="false" aria-controls="ai-panel-custom" type="button">+ Custom APIs (<span id="custom-api-count">0</span>)</button>
+      </div>
+
+      <!-- Panel A: Built-in Providers -->
+      <div id="ai-panel-builtin" role="tabpanel" aria-labelledby="ai-tab-builtin" class="form-stack">
         <div>
-          <label class="sub-label" for="modal-provider-select">Provider to configure</label>
+          <label class="sub-label" for="modal-provider-select">Built-in Provider</label>
           <select id="modal-provider-select" class="field-control"></select>
+          <p class="hint-text" id="modal-provider-hint"></p>
         </div>
 
         <div id="modal-apikey-group">
@@ -554,9 +647,14 @@
           <p class="hint-text">Only local loopback addresses (127.0.0.1 / localhost) or SSRF-verified public HTTPS endpoints are allowed.</p>
         </div>
 
+        <div class="test-conn-row">
+          <button class="btn btn-outline btn-sm" id="btn-test-builtin" type="button">Test Connection</button>
+          <span class="test-result" id="builtin-test-result" aria-live="polite"></span>
+        </div>
+
         <label class="checkbox-inline">
           <input type="checkbox" id="chk-session-persist">
-          <span>Keep keys for this browser tab session (sessionStorage)</span>
+          <span>Keep API keys for this browser tab session (sessionStorage)</span>
         </label>
 
         <label class="checkbox-inline">
@@ -564,10 +662,84 @@
           <span>Automatically fall back to Native Python Engine if a cloud provider fails</span>
         </label>
       </div>
+
+      <!-- Panel B: Custom APIs Manager -->
+      <div id="ai-panel-custom" role="tabpanel" aria-labelledby="ai-tab-custom" class="form-stack" hidden>
+        <div class="custom-form-grid">
+          <div>
+            <label class="sub-label" for="custom-api-name">Display Name *</label>
+            <input type="text" id="custom-api-name" class="field-control" maxlength="60" placeholder="e.g. DeepSeek Direct, LiteLLM Gateway">
+          </div>
+          <div>
+            <label class="sub-label" for="custom-api-protocol">API Protocol *</label>
+            <select id="custom-api-protocol" class="field-control">
+              <option value="openai_compat">OpenAI-Compatible (/chat/completions)</option>
+              <option value="gemini">Google Gemini (/v1beta/models)</option>
+              <option value="anthropic">Anthropic Messages (/v1/messages)</option>
+              <option value="ollama">Ollama (/api/chat)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="sub-label" for="custom-api-url">Base URL (Public HTTPS or localhost/127.0.0.1) *</label>
+          <input type="url" id="custom-api-url" class="field-control" placeholder="https://api.deepseek.com/v1">
+        </div>
+
+        <div class="custom-form-grid">
+          <div>
+            <label class="sub-label" for="custom-api-models">Model ID(s) (comma-separated) *</label>
+            <input type="text" id="custom-api-models" class="field-control" placeholder="deepseek-chat, deepseek-reasoner">
+          </div>
+          <div>
+            <label class="sub-label" for="custom-api-key">API Key / Token (Optional · RAM only)</label>
+            <div class="input-inline">
+              <input type="password" id="custom-api-key" class="field-control" autocomplete="off" placeholder="Optional secret token...">
+              <button class="btn btn-outline btn-sm" id="btn-toggle-custom-key" type="button">Show</button>
+            </div>
+          </div>
+        </div>
+
+        <details class="advanced-auth-box">
+          <summary class="sub-label summary-toggle">Advanced Auth Header (Optional)</summary>
+          <div class="custom-form-grid">
+            <div>
+              <label class="sub-label" for="custom-auth-header">Header Name</label>
+              <input type="text" id="custom-auth-header" class="field-control" maxlength="64" placeholder="Default for protocol (e.g. Authorization)">
+            </div>
+            <div>
+              <label class="sub-label" for="custom-auth-prefix">Value Prefix</label>
+              <select id="custom-auth-prefix" class="field-control">
+                <option value="__default__">Protocol Default</option>
+                <option value="Bearer">Bearer</option>
+                <option value="Token">Token</option>
+                <option value="">None (Raw key)</option>
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <div class="test-conn-row">
+          <div class="btn-group">
+            <button class="btn btn-outline btn-sm" id="btn-test-custom" type="button">Test Connection</button>
+            <button class="btn btn-primary btn-sm" id="btn-save-custom-api" type="button">Add Custom API</button>
+            <button class="btn btn-ghost btn-sm" id="btn-cancel-custom-edit" type="button" hidden>Cancel Edit</button>
+          </div>
+          <span class="test-result" id="custom-test-result" aria-live="polite"></span>
+        </div>
+
+        <div class="custom-list-wrap">
+          <div class="sub-label">Saved Custom APIs (metadata stored locally; keys stay in RAM/session)</div>
+          <div class="history-list" id="custom-api-list"></div>
+        </div>
+      </div>
     </div>
-    <div class="dialog-footer">
+    <div class="dialog-footer" id="modal-ai-footer-builtin">
       <button class="btn btn-outline btn-sm" id="btn-clear-provider-key" type="button">Clear Key</button>
-      <button class="btn btn-primary btn-sm" id="btn-save-provider-cfg" type="button">Save</button>
+      <button class="btn btn-primary btn-sm" id="btn-save-provider-cfg" type="button">Save &amp; Use Provider</button>
+    </div>
+    <div class="dialog-footer" id="modal-ai-footer-custom" hidden>
+      <button class="btn btn-outline btn-sm" type="button" data-close-dialog="modal-ai">Done</button>
     </div>
   </dialog>
 

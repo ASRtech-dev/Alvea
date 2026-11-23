@@ -27,6 +27,7 @@ from alvea.engine.mermaid import (
 )
 from alvea.engine.nlp_parser import LocalBPAEngine
 from alvea.engine.report import ReportBuilder
+from alvea.engine.sop import SOPGenerator
 from alvea.models import Direction, ProcessGraph
 from alvea.security import SSRFBlockedError
 
@@ -61,6 +62,7 @@ class PipelineOutcome:
     mermaid: str
     analytics: dict[str, Any]
     report: dict[str, Any]
+    sop: dict[str, Any]
     validation: dict[str, Any]
     meta: dict[str, Any]
 
@@ -226,6 +228,7 @@ class ProcessPipeline:
         self.mermaid_parser = MermaidParser()
         self.analyzer = GraphAnalyzer()
         self.report_builder = ReportBuilder()
+        self.sop_generator = SOPGenerator()
 
     def generate(
         self,
@@ -238,6 +241,9 @@ class ProcessPipeline:
         title: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        custom_protocol: str | None = None,
+        custom_auth_header: str | None = None,
+        custom_auth_prefix: str | None = None,
         allow_native_fallback: bool = True,
     ) -> PipelineOutcome:
         t0 = time.perf_counter()
@@ -261,6 +267,9 @@ class ProcessPipeline:
                     title=title,
                     api_key=api_key,
                     base_url=base_url,
+                    custom_protocol=custom_protocol,
+                    custom_auth_header=custom_auth_header,
+                    custom_auth_prefix=custom_auth_prefix,
                 )
             except (ProviderCallError, SSRFBlockedError) as exc:
                 if not allow_native_fallback or isinstance(exc, SSRFBlockedError) or getattr(exc, "status_code", 500) == 401:
@@ -306,6 +315,7 @@ class ProcessPipeline:
 
         analytics = self.analyzer.analyze(graph)
         report = self.report_builder.build(graph, analytics)
+        sop = self.sop_generator.generate(graph, analytics)
 
         final_mermaid = (
             self.mermaid_gen.render(
@@ -324,6 +334,7 @@ class ProcessPipeline:
             mermaid=final_mermaid,
             analytics=analytics.model_dump(),
             report=report.model_dump(),
+            sop=sop.model_dump(),
             validation=val.model_dump(),
             meta={
                 "provider": "mermaid_editor",
@@ -345,6 +356,9 @@ class ProcessPipeline:
         title: str | None,
         api_key: str | None,
         base_url: str | None,
+        custom_protocol: str | None = None,
+        custom_auth_header: str | None = None,
+        custom_auth_prefix: str | None = None,
     ) -> tuple[ProcessGraph, str]:
         model_spec = get_model_spec(provider, model_id)
         use_compact = bool(
@@ -376,6 +390,9 @@ class ProcessPipeline:
                     mode=mode,
                     api_key=api_key,
                     custom_base_url=base_url,
+                    custom_protocol=custom_protocol,
+                    custom_auth_header=custom_auth_header,
+                    custom_auth_prefix=custom_auth_prefix,
                 )
                 used_mode = mode
                 break
@@ -418,6 +435,9 @@ class ProcessPipeline:
                     mode=repair_mode,
                     api_key=api_key,
                     custom_base_url=base_url,
+                    custom_protocol=custom_protocol,
+                    custom_auth_header=custom_auth_header,
+                    custom_auth_prefix=custom_auth_prefix,
                     temperature=0.0,
                 )
                 parsed_dict = repair_and_parse_json_dict(repaired_raw)
@@ -451,6 +471,7 @@ class ProcessPipeline:
     ) -> PipelineOutcome:
         analytics = self.analyzer.analyze(graph)
         report = self.report_builder.build(graph, analytics)
+        sop = self.sop_generator.generate(graph, analytics)
         mermaid_code = self.mermaid_gen.render(
             graph,
             direction=direction,
@@ -465,6 +486,7 @@ class ProcessPipeline:
             mermaid=mermaid_code,
             analytics=analytics.model_dump(),
             report=report.model_dump(),
+            sop=sop.model_dump(),
             validation=validation.model_dump(),
             meta={
                 "provider": provider_id,

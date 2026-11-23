@@ -35,6 +35,7 @@ class ProviderSpec:
     allow_custom_url: bool = False
     badges: tuple[str, ...] = ()
     privacy_note: str = ""
+    key_hint: str = ""
     default_model: str = ""
     models: tuple[ModelSpec, ...] = field(default_factory=tuple)
 
@@ -129,6 +130,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="GEMINI_API_KEY",
         badges=("Free", "Free Tier", "Strict JSON"),
         privacy_note="Google AI Studio free tier with no credit card required. Use Local mode for confidential workflows.",
+        key_hint="Get a free API key at aistudio.google.com/apikey",
         default_model="gemini-3.8-flash",
         models=(
             ModelSpec("gemini-3.8-flash", "Gemini 3.8 Flash", ("Free", "Recommended"), "json_schema", False, False, True),
@@ -148,6 +150,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="GROQ_API_KEY",
         badges=("Free", "Ultra-fast"),
         privacy_note="Free LPU inference tier with no credit card required (minute/day rate limits apply).",
+        key_hint="Get a free API key at console.groq.com/keys",
         default_model="llama-3.3-70b-versatile",
         models=(
             ModelSpec("llama-3.3-70b-versatile", "Meta Llama 3.3 70B Versatile", ("Free", "Recommended"), "json_object", False, False, True),
@@ -167,6 +170,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="OPENROUTER_API_KEY",
         badges=("Free", "Multi-Vendor"),
         privacy_note="Zero-cost ($0) pool of open models across multiple labs with automatic fallback routing.",
+        key_hint="Get a free API key at openrouter.ai/keys",
         default_model="openrouter/free",
         models=(
             ModelSpec("openrouter/free", "OpenRouter Auto-Router (:free)", ("Free", "Resilient"), "json_object", False, False, True),
@@ -188,6 +192,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="CEREBRAS_API_KEY",
         badges=("Free Trial", "Ultra-fast"),
         privacy_note="Wafer-scale inference (>1000 tok/s) with native structured JSON decoding.",
+        key_hint="Get an API key at cloud.cerebras.ai",
         default_model="qwen-3.8-27b",
         models=(
             ModelSpec("qwen-3.8-27b", "Qwen 3.8 27B (Cerebras)", ("Ultra-fast", "Recommended"), "json_schema", True, False, True),
@@ -205,6 +210,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="GITHUB_TOKEN",
         badges=("Free Dev", "Multi-Vendor"),
         privacy_note="Free for developers using a GitHub Personal Access Token with models:read scope.",
+        key_hint="Create a GitHub PAT with models:read at github.com/settings/tokens",
         default_model="openai/gpt-4.1-mini",
         models=(
             ModelSpec("openai/gpt-4.1-mini", "OpenAI GPT-4.1 Mini (GitHub)", ("Free Dev", "Recommended"), "json_schema", False, False, True),
@@ -226,6 +232,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="MISTRAL_API_KEY",
         badges=("BYOK", "European"),
         privacy_note="Commercial Mistral AI API (requires an API key with active billing).",
+        key_hint="Get an API key at console.mistral.ai/api-keys",
         default_model="mistral-small-latest",
         models=(
             ModelSpec("mistral-small-latest", "Mistral Small Latest", ("BYOK", "Efficient"), "json_object", False, False, True),
@@ -243,6 +250,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="OPENAI_API_KEY",
         badges=("BYOK", "Strict JSON"),
         privacy_note="Direct OpenAI API with native Structured Outputs.",
+        key_hint="Get an API key at platform.openai.com/api-keys",
         default_model="gpt-4.1-mini",
         models=(
             ModelSpec("gpt-4.1-mini", "GPT-4.1 Mini", ("BYOK", "Recommended"), "json_schema", False, False, True),
@@ -261,6 +269,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         env_var="ANTHROPIC_API_KEY",
         badges=("BYOK", "High Precision"),
         privacy_note="Anthropic Messages API with structured tool_use output.",
+        key_hint="Get an API key at console.anthropic.com/settings/keys",
         default_model="claude-sonnet-4-5",
         models=(
             ModelSpec("claude-sonnet-4-5", "Claude Sonnet 4.5", ("BYOK", "Recommended"), "json_schema", False, False, True),
@@ -269,7 +278,7 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
     ),
     ProviderSpec(
         id="custom_openai",
-        name="OpenAI-Compatible Endpoint",
+        name="Custom API Endpoint",
         company="Custom",
         group="byok",
         protocol="openai_compat",
@@ -277,8 +286,9 @@ PROVIDER_CATALOG: tuple[ProviderSpec, ...] = (
         requires_api_key=False,
         env_var="CUSTOM_API_KEY",
         allow_custom_url=True,
-        badges=("Custom", "OpenAI API"),
-        privacy_note="Compatible with public HTTPS servers or local loopback (vLLM, LiteLLM, etc.) under SSRF protection.",
+        badges=("Custom", "Multi-Protocol"),
+        privacy_note="Connect any public HTTPS API or local loopback server (vLLM, LiteLLM, DeepSeek, Together, Fireworks, custom Gemini/Anthropic gateways) under SSRF protection.",
+        key_hint="Provide your endpoint Base URL, protocol, model ID, and optional API key.",
         default_model="custom-model",
         models=(
             ModelSpec("custom-model", "Custom model (editable)", ("Custom",), "json_object", False, False, True),

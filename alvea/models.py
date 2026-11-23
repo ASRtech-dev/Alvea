@@ -297,7 +297,60 @@ class ValidationResult(BaseModel):
     repairs_applied: list[str] = Field(default_factory=list)
 
 
+# ─── Standard Operating Procedure (SOP) Domain Models ──────────────────────────
+
+class SOPBranchTarget(BaseModel):
+    condition: str
+    target_step: str
+    target_label: str
+    target_node_id: str
+    is_loop: bool = False
+
+
+class SOPStep(BaseModel):
+    step_number: str
+    node_id: str
+    title: str
+    owner: str
+    owner_kind: str
+    execution_mode: Literal["Manual", "Automated", "Decision Gateway", "Wait / SLA", "Parallel Sync", "Milestone"]
+    instruction: str
+    sla_display: str | None = None
+    is_critical_path: bool = False
+    parallel_group: str | None = None
+    next_steps: list[SOPBranchTarget] = Field(default_factory=list)
+    rework_loops: list[SOPBranchTarget] = Field(default_factory=list)
+
+
+class SOPRoleMatrixRow(BaseModel):
+    role_name: str
+    role_kind: str
+    step_numbers: list[str]
+    step_count: int
+    automated_steps: int
+    responsibility_summary: str
+
+
+class SOPDocument(BaseModel):
+    sop_id: str
+    title: str
+    version: str = "1.0"
+    effective_date: str
+    purpose: str
+    scope: str
+    estimated_cycle_time: str
+    roles_and_responsibilities: list[SOPRoleMatrixRow]
+    steps: list[SOPStep]
+    decision_rules: list[dict[str, Any]]
+    rework_and_exceptions: list[str]
+    sla_and_controls: list[str]
+
+
 # ─── REST API Contracts ────────────────────────────────────────────────────────
+
+CustomProtocol = Literal["openai_compat", "gemini", "anthropic", "ollama"]
+CustomAuthPrefix = Literal["Bearer", "Token", ""]
+
 
 class GenerateRequest(BaseModel):
     text: str = Field(..., min_length=5, max_length=15_000)
@@ -308,7 +361,20 @@ class GenerateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=120)
     api_key: SecretStr | None = None
     base_url: str | None = Field(default=None, max_length=256)
+    custom_protocol: CustomProtocol | None = None
+    custom_auth_header: str | None = Field(default=None, max_length=64)
+    custom_auth_prefix: CustomAuthPrefix | None = None
     allow_native_fallback: bool = True
+
+
+class TestProviderRequest(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=40)
+    model: str | None = Field(default=None, max_length=120)
+    api_key: SecretStr | None = None
+    base_url: str | None = Field(default=None, max_length=256)
+    custom_protocol: CustomProtocol | None = None
+    custom_auth_header: str | None = Field(default=None, max_length=64)
+    custom_auth_prefix: CustomAuthPrefix | None = None
 
 
 class ValidateMermaidRequest(BaseModel):

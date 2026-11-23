@@ -161,6 +161,21 @@ class TestSecurityPathsAndHTTPAPI(unittest.TestCase):
             self.assertEqual(json_resp.status_code, 200)
             self.assertIn("process_graph", json_resp.json())
 
+            # v3.1 SOP included in generate + SOP PDF & Markdown export endpoints
+            self.assertIn("sop", payload)
+            self.assertTrue(payload["sop"]["sop_id"].startswith("SOP-"))
+
+            sop_pdf_resp = client.post("/api/v1/export/sop/pdf", json={"mermaid": mermaid, "title": "Claim SOP"})
+            self.assertEqual(sop_pdf_resp.status_code, 200)
+            self.assertEqual(sop_pdf_resp.headers.get("content-type"), "application/pdf")
+            self.assertTrue(sop_pdf_resp.content.startswith(b"%PDF-"))
+
+            sop_md_resp = client.post("/api/v1/export/sop/markdown", json={"mermaid": mermaid, "title": "Claim SOP"})
+            self.assertEqual(sop_md_resp.status_code, 200)
+            self.assertIn("text/markdown", sop_md_resp.headers.get("content-type", ""))
+            self.assertEqual(sop_md_resp.headers.get("x-content-type-options"), "nosniff")
+            self.assertIn("## 3. Step-by-Step Operating Procedure", sop_md_resp.text)
+
             # Auto-repair=False must still enforce anti-XSS sanitization
             xss_resp = client.post(
                 "/api/v1/mermaid/validate",
@@ -171,6 +186,52 @@ class TestSecurityPathsAndHTTPAPI(unittest.TestCase):
             )
             self.assertEqual(xss_resp.status_code, 200)
             self.assertNotIn("click A", xss_resp.json()["mermaid"])
+
+    def test_provider_test_endpoint_blocks_ssrf_and_forbidden_headers(self) -> None:
+        with httpx.Client(base_url=self.base_url) as client:
+            # 1. Native python test succeeds cleanly
+            ok_resp = client.post("/api/v1/providers/test", json={"provider": "native_python"})
+            self.assertEqual(ok_resp.status_code, 200)
+            self.assertTrue(ok_resp.json()["ok"])
+
+            # 2. SSRF metadata IP blocked on custom endpoint test
+            ssrf_resp = client.post(
+                "/api/v1/providers/test",
+                json={
+                    "provider": "custom_openai",
+                    "model": "test-model",
+                    "base_url": "http://169.254.169.254/latest/meta-data",
+                    "custom_protocol": "openai_compat",
+                },
+            )
+            self.assertEqual(ssrf_resp.status_code, 400)
+
+            # 3. Private RFC1918 IP blocked
+            priv_resp = client.post(
+                "/api/v1/providers/test",
+                json={
+                    "provider": "custom_openai",
+                    "model": "test-model",
+                    "base_url": "https://10.0.0.1/v1",
+                    "custom_protocol": "gemini",
+                },
+            )
+            self.assertEqual(priv_resp.status_code, 400)
+
+            # 4. Forbidden custom auth header blocked
+            hdr_resp = client.post(
+                "/api/v1/providers/test",
+                headers={"X-API-Key": "custom_secret_token_999"},
+                json={
+                    "provider": "custom_openai",
+                    "model": "test-model",
+                    "base_url": "http://127.0.0.1:18080/v1",
+                    "custom_protocol": "openai_compat",
+                    "custom_auth_header": "Host",
+                },
+            )
+            self.assertEqual(hdr_resp.status_code, 400)
+            self.assertNotIn("custom_secret_token_999", hdr_resp.text)
 
     def test_auto_port_falls_back_when_port_is_busy_and_respects_bounds(self) -> None:
         srv2 = create_server(host="127.0.0.1", port=self.port, auto_port=True)

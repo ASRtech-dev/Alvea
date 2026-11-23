@@ -23,7 +23,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from alvea.models import ExecutiveReport, GraphAnalytics, ProcessGraph
+from alvea.models import ExecutiveReport, GraphAnalytics, ProcessGraph, SOPDocument
 
 BRAND_NAVY = colors.HexColor("#1E3A5F")
 BRAND_SLATE = colors.HexColor("#475569")
@@ -333,6 +333,238 @@ def export_executive_pdf(
     # 9. Technical Mermaid Appendix
     story.append(_safe_p("7. Technical Appendix: Mermaid.js Source", h2_style))
     story.append(Preformatted(_to_winansi_safe(mermaid_code[:3800]), mono_style, maxLineLength=102))
+
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def export_sop_pdf(
+    *,
+    sop: SOPDocument,
+    graph: ProcessGraph,
+    diagram_png_base64: str | None = None,
+) -> bytes:
+    """Builds the multipage ISO-style ALVEA Standard Operating Procedure (SOP) PDF in memory."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=1.6 * cm,
+        rightMargin=1.6 * cm,
+        topMargin=1.6 * cm,
+        bottomMargin=1.6 * cm,
+        title=_to_winansi_safe(f"{sop.sop_id} - {sop.title}"),
+        author="ALVEA Process Architecture Studio",
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "SopTitle",
+        parent=styles["Heading1"],
+        fontName="Helvetica-Bold",
+        fontSize=14.5,
+        textColor=colors.white,
+        leading=19,
+    )
+    subtitle_style = ParagraphStyle(
+        "SopSubtitle",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8.3,
+        textColor=colors.HexColor("#DCE7F5"),
+        leading=11,
+    )
+    h2_style = ParagraphStyle(
+        "SopH2",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=11.0,
+        textColor=BRAND_NAVY,
+        spaceBefore=11,
+        spaceAfter=4,
+    )
+    body_style = ParagraphStyle(
+        "SopBody",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8.8,
+        textColor=colors.HexColor("#1E293B"),
+        leading=12.8,
+    )
+    cell_style = ParagraphStyle(
+        "SopCell",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=7.8,
+        textColor=colors.HexColor("#1E293B"),
+        leading=10.5,
+    )
+    cell_bold = ParagraphStyle(
+        "SopCellBold",
+        parent=cell_style,
+        fontName="Helvetica-Bold",
+        textColor=BRAND_NAVY,
+    )
+
+    story: list = []
+
+    # 1. Document Control Banner
+    banner = Table(
+        [
+            [
+                _safe_p(sop.title, title_style),
+                _safe_p(sop.sop_id, title_style),
+            ],
+            [
+                _safe_p(
+                    f"Standard Operating Procedure | Rev {sop.version} | Est. Cycle Time: {sop.estimated_cycle_time}",
+                    subtitle_style,
+                ),
+                _safe_p(f"Effective: {sop.effective_date}", subtitle_style),
+            ],
+        ],
+        colWidths=[13.8 * cm, 4.0 * cm],
+    )
+    banner.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), BRAND_NAVY),
+                ("LEFTPADDING", (0, 0), (-1, -1), 11),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 11),
+                ("TOPPADDING", (0, 0), (-1, 0), 9),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 9),
+                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
+    story.append(banner)
+    story.append(Spacer(1, 0.35 * cm))
+
+    # 2. Purpose & Scope
+    story.append(_safe_p("1. Purpose & Scope", h2_style))
+    story.append(_safe_p(f"Purpose: {sop.purpose}", body_style))
+    story.append(Spacer(1, 0.12 * cm))
+    story.append(_safe_p(f"Scope: {sop.scope}", body_style))
+    story.append(Spacer(1, 0.25 * cm))
+
+    # 3. Roles & Responsibilities Matrix
+    story.append(_safe_p("2. Roles & Responsibilities", h2_style))
+    role_rows: list[list] = [["Role / System", "Type", "Assigned Steps", "Auto", "Primary Responsibilities"]]
+    for row in sop.roles_and_responsibilities:
+        steps_txt = ", ".join(row.step_numbers) if row.step_numbers else "-"
+        role_rows.append([
+            _safe_p(row.role_name, cell_bold),
+            _safe_p(row.role_kind, cell_style),
+            _safe_p(steps_txt, cell_style),
+            _safe_p(f"{row.automated_steps}/{row.step_count}", cell_style),
+            _safe_p(row.responsibility_summary, cell_style),
+        ])
+    role_table = Table(role_rows, colWidths=[3.6 * cm, 2.2 * cm, 2.8 * cm, 1.4 * cm, 7.8 * cm], repeatRows=1)
+    role_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), BRAND_NAVY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 8.0),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, SURFACE_LIGHT]),
+                ("GRID", (0, 0), (-1, -1), 0.4, BORDER_GRAY),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(role_table)
+    story.append(Spacer(1, 0.3 * cm))
+
+    # 4. Step-by-Step Operating Procedure
+    story.append(_safe_p("3. Step-by-Step Operating Procedure", h2_style))
+    step_rows: list[list] = [["Step", "Owner", "Mode", "Procedure & Routing", "SLA"]]
+    for step in sop.steps:
+        step_badge = f"{step.step_number} *" if step.is_critical_path else step.step_number
+        routing_chunks: list[str] = []
+        for nxt in step.next_steps:
+            routing_chunks.append(f"[{nxt.condition} -> Step {nxt.target_step}]")
+        for lp in step.rework_loops:
+            routing_chunks.append(f"[LOOP: {lp.condition} -> Return to Step {lp.target_step}]")
+        full_proc = step.instruction
+        if routing_chunks:
+            full_proc = f"{full_proc} {' '.join(routing_chunks)}"
+        step_rows.append([
+            _safe_p(step_badge, cell_bold),
+            _safe_p(step.owner, cell_style),
+            _safe_p(step.execution_mode, cell_style),
+            _safe_p(full_proc, cell_style),
+            _safe_p(step.sla_display or "-", cell_style),
+        ])
+    step_table = Table(step_rows, colWidths=[1.4 * cm, 2.8 * cm, 2.3 * cm, 9.5 * cm, 1.8 * cm], repeatRows=1)
+    step_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), BRAND_NAVY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 8.0),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, SURFACE_LIGHT]),
+                ("GRID", (0, 0), (-1, -1), 0.4, BORDER_GRAY),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(step_table)
+    story.append(_safe_p("* Denotes a step on the NetworkX Critical Path.", cell_style))
+    story.append(Spacer(1, 0.25 * cm))
+
+    # 5. Decision Matrix (if present)
+    if sop.decision_rules:
+        story.append(_safe_p("4. Decision & Routing Matrix", h2_style))
+        dec_rows: list[list] = [["Step", "Gateway", "Owner", "Routing Rules"]]
+        for rule in sop.decision_rules:
+            branches_str = "; ".join(f"{b['condition']} -> {b['action']}" for b in rule.get("branches", []))
+            dec_rows.append([
+                _safe_p(str(rule.get("step_number", "?")), cell_bold),
+                _safe_p(str(rule.get("gateway", "")), cell_style),
+                _safe_p(str(rule.get("owner", "")), cell_style),
+                _safe_p(branches_str, cell_style),
+            ])
+        dec_table = Table(dec_rows, colWidths=[1.4 * cm, 4.0 * cm, 3.0 * cm, 9.4 * cm], repeatRows=1)
+        dec_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), BRAND_NAVY),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 8.0),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, SURFACE_LIGHT]),
+                    ("GRID", (0, 0), (-1, -1), 0.4, BORDER_GRAY),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        story.append(dec_table)
+        story.append(Spacer(1, 0.25 * cm))
+
+    # 6. Exception Handling & Rework Loops
+    sec_num = 5 if sop.decision_rules else 4
+    story.append(_safe_p(f"{sec_num}. Exception Handling & Rework Loops", h2_style))
+    for item in sop.rework_and_exceptions:
+        story.append(_safe_p(f"- {item}", body_style))
+
+    # 7. SLA & Quality Controls
+    story.append(_safe_p(f"{sec_num + 1}. SLA & Quality Controls", h2_style))
+    for ctrl in sop.sla_and_controls:
+        story.append(_safe_p(f"- {ctrl}", body_style))
+
+    # 8. Visual Process Reference
+    story.append(_safe_p(f"{sec_num + 2}. Visual Swimlane Reference", h2_style))
+    embedded_img = _build_embedded_diagram(diagram_png_base64, max_w=17.6 * cm, max_h=8.0 * cm)
+    story.append(embedded_img if embedded_img is not None else _build_vector_schematic(graph, width=17.6 * cm))
 
     doc.build(story)
     return buffer.getvalue()

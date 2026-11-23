@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"AIza[0-9A-Za-z_\-]{16,}"), "[REDACTED_GOOGLE_KEY]"),
@@ -14,13 +15,19 @@ _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"csk-[0-9A-Za-z_\-]{16,}"), "[REDACTED_CEREBRAS_KEY]"),
     (re.compile(r"(?:ghp|gho|github_pat)_[0-9A-Za-z_\-]{16,}"), "[REDACTED_GITHUB_TOKEN]"),
     (re.compile(r"(?i)(Bearer\s+)[^\s\"',;]+"), r"\1[REDACTED_TOKEN]"),
+    (re.compile(r"(?i)(Token\s+)[^\s\"',;]+"), r"\1[REDACTED_TOKEN]"),
     (re.compile(r"(?i)([?&](?:key|api_key|token)=)[^&\s\"']+"), r"\1[REDACTED]"),
 )
 
 
-def redact_secrets(text: str) -> str:
-    """Enmascara cualquier patrón de API key o token en cadenas de log o error."""
+def redact_secrets(text: str, extra_secrets: Iterable[str] | None = None) -> str:
+    """Masks any API key pattern or explicit literal secret in logs or error messages."""
     result = str(text)
+    if extra_secrets:
+        for secret in extra_secrets:
+            s = (secret or "").strip()
+            if len(s) >= 6 and s in result:
+                result = result.replace(s, "[REDACTED_CUSTOM_KEY]")
     for pattern, replacement in _SECRET_PATTERNS:
         result = pattern.sub(replacement, result)
     return result

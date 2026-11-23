@@ -5,6 +5,8 @@ from alvea.security.redaction import SecretRedactionFilter, redact_secrets
 from alvea.security.ssrf import (
     CLOUD_HOST_ALLOWLIST,
     SSRFBlockedError,
+    validate_custom_auth_header,
+    validate_header_value,
     validate_model_id,
     validate_outbound_url,
 )
@@ -16,6 +18,8 @@ __all__ = [
     "SecretRedactionFilter",
     "redact_secrets",
     "safe_resolve_static",
+    "validate_custom_auth_header",
+    "validate_header_value",
     "validate_model_id",
     "validate_outbound_url",
 ]

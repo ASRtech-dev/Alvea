@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from collections.abc import Iterable
 from typing import Any
 
 import httpx
@@ -22,6 +24,8 @@ from alvea.security import (
     CLOUD_HOST_ALLOWLIST,
     SSRFBlockedError,
     redact_secrets,
+    validate_custom_auth_header,
+    validate_header_value,
     validate_model_id,
     validate_outbound_url,
 )
@@ -30,8 +34,15 @@ from alvea.security import (
 class ProviderCallError(RuntimeError):
     """Controlled exception for LLM provider communication failures."""
 
-    def __init__(self, message: str, *, status_code: int = 502, retryable_mode: bool = False) -> None:
-        super().__init__(redact_secrets(message))
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int = 502,
+        retryable_mode: bool = False,
+        extra_secrets: Iterable[str] | None = None,
+    ) -> None:
+        super().__init__(redact_secrets(message, extra_secrets=extra_secrets))
         self.status_code = status_code
         self.retryable_mode = retryable_mode
 
@@ -166,6 +177,33 @@ def discover_local_models(provider_id: str, custom_base_url: str | None = None) 
         return {"ok": False, "models": [], "detail": "Unexpected error while querying local models."}
 
 
+def _apply_custom_auth(
+    headers: dict[str, str],
+    api_key: str,
+    *,
+    default_header: str,
+    default_prefix: str = "",
+    custom_auth_header: str | None = None,
+    custom_auth_prefix: str | None = None,
+) -> None:
+    """Safely injects credentials into outbound HTTP headers with strict header validation."""
+    if not api_key:
+        return
+    safe_key = validate_header_value(api_key)
+    header_name = validate_custom_auth_header(custom_auth_header) or default_header
+    prefix = default_prefix if custom_auth_prefix is None else custom_auth_prefix
+    if prefix:
+        headers[header_name] = f"{prefix} {safe_key}"
+    else:
+        headers[header_name] = safe_key
+
+
+def _resolve_effective_protocol(provider: ProviderSpec, custom_protocol: str | None) -> str:
+    if provider.id == "custom_openai" and custom_protocol in ("openai_compat", "gemini", "anthropic", "ollama"):
+        return custom_protocol
+    return provider.protocol
+
+
 def call_llm_provider(
     *,
     provider: ProviderSpec,
@@ -176,20 +214,32 @@ def call_llm_provider(
     mode: StructuredMode,
     api_key: str | None = None,
     custom_base_url: str | None = None,
+    custom_protocol: str | None = None,
+    custom_auth_header: str | None = None,
+    custom_auth_prefix: str | None = None,
     temperature: float = 0.1,
+    max_tokens: int = 4096,
+    timeout_override: httpx.Timeout | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Executes an SSRF-validated HTTP call to the selected LLM provider."""
     safe_model = validate_model_id(model_id)
     base_url, ssrf_mode = _resolve_provider_url(provider, custom_base_url)
     resolved_key = _resolve_api_key(provider, api_key)
+    extra_secrets = (resolved_key,) if resolved_key else None
+
+    if resolved_key:
+        validate_header_value(resolved_key)
+    safe_auth_header = validate_custom_auth_header(custom_auth_header) if provider.id == "custom_openai" else None
+    safe_auth_prefix = custom_auth_prefix if provider.id == "custom_openai" else None
+    effective_protocol = _resolve_effective_protocol(provider, custom_protocol)
 
     if provider.requires_api_key and not resolved_key:
         raise ProviderCallError(
-            f"Missing API Key for {provider.name}. Configure it in 'AI Providers' or set the {provider.env_var} environment variable.",
+            f"Missing API Key for {provider.name}. Click 'Configure API' in the sidebar or set the {provider.env_var} environment variable.",
             status_code=401,
         )
 
-    timeout = httpx.Timeout(
+    timeout = timeout_override or httpx.Timeout(
         connect=SETTINGS.connect_timeout_s,
         read=SETTINGS.read_timeout_s,
         write=10.0,
@@ -199,17 +249,52 @@ def call_llm_provider(
 
     try:
         with httpx.Client(timeout=timeout, limits=limits, follow_redirects=False) as client:
-            if provider.protocol == "gemini":
+            if effective_protocol == "gemini":
                 return _call_gemini(
-                    client, base_url, safe_model, resolved_key, system_prompt, user_prompt, json_schema, mode, temperature
+                    client,
+                    base_url,
+                    safe_model,
+                    resolved_key,
+                    system_prompt,
+                    user_prompt,
+                    json_schema,
+                    mode,
+                    temperature,
+                    max_tokens=max_tokens,
+                    custom_auth_header=safe_auth_header,
+                    custom_auth_prefix=safe_auth_prefix,
+                    extra_secrets=extra_secrets,
                 )
-            if provider.protocol == "ollama":
+            if effective_protocol == "ollama":
                 return _call_ollama(
-                    client, base_url, safe_model, system_prompt, user_prompt, json_schema, mode, temperature
+                    client,
+                    base_url,
+                    safe_model,
+                    resolved_key,
+                    system_prompt,
+                    user_prompt,
+                    json_schema,
+                    mode,
+                    temperature,
+                    custom_auth_header=safe_auth_header,
+                    custom_auth_prefix=safe_auth_prefix,
+                    extra_secrets=extra_secrets,
                 )
-            if provider.protocol == "anthropic":
+            if effective_protocol == "anthropic":
                 return _call_anthropic(
-                    client, base_url, safe_model, resolved_key, system_prompt, user_prompt, json_schema, mode, temperature
+                    client,
+                    base_url,
+                    safe_model,
+                    resolved_key,
+                    system_prompt,
+                    user_prompt,
+                    json_schema,
+                    mode,
+                    temperature,
+                    max_tokens=max_tokens,
+                    custom_auth_header=safe_auth_header,
+                    custom_auth_prefix=safe_auth_prefix,
+                    extra_secrets=extra_secrets,
                 )
             return _call_openai_compat(
                 client,
@@ -223,15 +308,126 @@ def call_llm_provider(
                 mode,
                 temperature,
                 ssrf_mode,
+                max_tokens=max_tokens,
+                custom_auth_header=safe_auth_header,
+                custom_auth_prefix=safe_auth_prefix,
+                extra_secrets=extra_secrets,
             )
-    except ProviderCallError:
+    except ProviderCallError as exc:
+        raise ProviderCallError(
+            str(exc),
+            status_code=exc.status_code,
+            retryable_mode=exc.retryable_mode,
+            extra_secrets=extra_secrets,
+        ) from exc
+    except SSRFBlockedError:
         raise
     except httpx.TimeoutException as exc:
-        raise ProviderCallError(f"Request timed out while contacting {provider.name}.", status_code=504) from exc
+        raise ProviderCallError(
+            f"Request timed out while contacting {provider.name}.",
+            status_code=504,
+            extra_secrets=extra_secrets,
+        ) from exc
     except httpx.ConnectError as exc:
-        raise ProviderCallError(f"Could not connect to {provider.name}. Check your network or local server.", status_code=502) from exc
+        raise ProviderCallError(
+            f"Could not connect to {provider.name}. Check your network, Base URL, or local server.",
+            status_code=502,
+            extra_secrets=extra_secrets,
+        ) from exc
     except httpx.HTTPError as exc:
-        raise ProviderCallError(f"HTTP transport error while communicating with {provider.name}.", status_code=502) from exc
+        raise ProviderCallError(
+            f"HTTP transport error while communicating with {provider.name}.",
+            status_code=502,
+            extra_secrets=extra_secrets,
+        ) from exc
+
+
+def test_provider_connection(
+    *,
+    provider_id: str,
+    model_id: str | None = None,
+    api_key: str | None = None,
+    custom_base_url: str | None = None,
+    custom_protocol: str | None = None,
+    custom_auth_header: str | None = None,
+    custom_auth_prefix: str | None = None,
+) -> dict[str, Any]:
+    """Tests connectivity & credentials for a built-in or custom provider without reflecting remote bodies."""
+    t0 = time.perf_counter()
+    provider = get_provider(provider_id)
+    if provider is None:
+        return {
+            "ok": False,
+            "status_code": 400,
+            "latency_ms": 0.0,
+            "message": f"Unknown provider: '{provider_id}'.",
+        }
+
+    if provider.protocol == "native":
+        return {
+            "ok": True,
+            "status_code": 200,
+            "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            "message": "Native Python BPA Engine is ready (100% local, no API key required).",
+        }
+
+    # For built-in local providers (Ollama / LM Studio), use fast discovery probe first
+    if provider.supports_discovery:
+        probe = discover_local_models(provider.id, custom_base_url=custom_base_url)
+        latency = round((time.perf_counter() - t0) * 1000, 1)
+        return {
+            "ok": bool(probe.get("ok")),
+            "status_code": 200 if probe.get("ok") else 502,
+            "latency_ms": latency,
+            "message": str(probe.get("detail") or ("Connected." if probe.get("ok") else "Local server unreachable.")),
+            "models": probe.get("models", []),
+        }
+
+    chosen_model = (model_id or provider.default_model or "custom-model").strip()
+    short_timeout = httpx.Timeout(connect=4.0, read=12.0, write=5.0, pool=3.0)
+
+    try:
+        text, _ = call_llm_provider(
+            provider=provider,
+            model_id=chosen_model,
+            system_prompt="You are a connectivity test probe. Reply concisely with OK.",
+            user_prompt="Reply with OK.",
+            json_schema={"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]},
+            mode="prompt_only",
+            api_key=api_key,
+            custom_base_url=custom_base_url,
+            custom_protocol=custom_protocol,
+            custom_auth_header=custom_auth_header,
+            custom_auth_prefix=custom_auth_prefix,
+            temperature=0.0,
+            max_tokens=32,
+            timeout_override=short_timeout,
+        )
+        latency = round((time.perf_counter() - t0) * 1000, 1)
+        # Never reflect raw remote response text; return deterministic confirmation only
+        if text.strip():
+            return {
+                "ok": True,
+                "status_code": 200,
+                "latency_ms": latency,
+                "message": f"Connected to {provider.name} ({chosen_model}) in {int(latency)} ms.",
+            }
+        return {
+            "ok": False,
+            "status_code": 502,
+            "latency_ms": latency,
+            "message": f"{provider.name} returned an empty response.",
+        }
+    except SSRFBlockedError:
+        raise
+    except ProviderCallError as exc:
+        latency = round((time.perf_counter() - t0) * 1000, 1)
+        return {
+            "ok": False,
+            "status_code": exc.status_code,
+            "latency_ms": latency,
+            "message": str(exc),
+        }
 
 
 def _post_bounded_json(
@@ -241,9 +437,10 @@ def _post_bounded_json(
     headers: dict[str, str],
     payload: dict[str, Any],
     provider_name: str,
+    extra_secrets: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     with client.stream("POST", url, headers=headers, json=payload) as resp:
-        _check_http_status(resp, provider_name)
+        _check_http_status(resp, provider_name, extra_secrets=extra_secrets)
         return _read_bounded_json(resp)
 
 
@@ -257,9 +454,17 @@ def _call_gemini(
     json_schema: dict[str, Any],
     mode: StructuredMode,
     temperature: float,
+    *,
+    max_tokens: int = 4096,
+    custom_auth_header: str | None = None,
+    custom_auth_prefix: str | None = None,
+    extra_secrets: Iterable[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    url = f"{base_url}/v1beta/models/{model_id}:generateContent"
-    gen_cfg: dict[str, Any] = {"temperature": temperature, "maxOutputTokens": 4096}
+    if base_url.endswith("/v1beta"):
+        url = f"{base_url}/models/{model_id}:generateContent"
+    else:
+        url = f"{base_url}/v1beta/models/{model_id}:generateContent"
+    gen_cfg: dict[str, Any] = {"temperature": temperature, "maxOutputTokens": max_tokens}
     if mode == "json_schema":
         gen_cfg["responseMimeType"] = "application/json"
         gen_cfg["responseJsonSchema"] = json_schema
@@ -271,18 +476,32 @@ def _call_gemini(
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
         "generationConfig": gen_cfg,
     }
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    _apply_custom_auth(
+        headers,
+        api_key,
+        default_header="x-goog-api-key",
+        default_prefix="",
+        custom_auth_header=custom_auth_header,
+        custom_auth_prefix=custom_auth_prefix,
+    )
     data = _post_bounded_json(
         client,
         url,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        headers=headers,
         payload=payload,
         provider_name="Google Gemini",
+        extra_secrets=extra_secrets,
     )
     candidates = data.get("candidates") or []
     parts = ((candidates[0].get("content") or {}).get("parts") or []) if candidates else []
     text = "".join(str(p.get("text") or "") for p in parts if isinstance(p, dict))
     if not text.strip():
-        raise ProviderCallError("Google Gemini returned an empty or safety-filtered response.", status_code=502)
+        raise ProviderCallError(
+            "Google Gemini returned an empty or safety-filtered response.",
+            status_code=502,
+            extra_secrets=extra_secrets,
+        )
     return text, {"usage": data.get("usageMetadata") or {}}
 
 
@@ -290,13 +509,18 @@ def _call_ollama(
     client: httpx.Client,
     base_url: str,
     model_id: str,
+    api_key: str,
     system_prompt: str,
     user_prompt: str,
     json_schema: dict[str, Any],
     mode: StructuredMode,
     temperature: float,
+    *,
+    custom_auth_header: str | None = None,
+    custom_auth_prefix: str | None = None,
+    extra_secrets: Iterable[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    url = f"{base_url}/api/chat"
+    url = base_url if base_url.endswith("/api/chat") else f"{base_url}/api/chat"
     payload: dict[str, Any] = {
         "model": model_id,
         "stream": False,
@@ -311,17 +535,29 @@ def _call_ollama(
     elif mode == "json_object":
         payload["format"] = "json"
 
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if api_key:
+        _apply_custom_auth(
+            headers,
+            api_key,
+            default_header="Authorization",
+            default_prefix="Bearer",
+            custom_auth_header=custom_auth_header,
+            custom_auth_prefix=custom_auth_prefix,
+        )
+
     data = _post_bounded_json(
         client,
         url,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         payload=payload,
-        provider_name="Ollama Local",
+        provider_name="Ollama",
+        extra_secrets=extra_secrets,
     )
     content = (data.get("message") or {}).get("content")
     text = content if isinstance(content, str) else ""
     if not text.strip():
-        raise ProviderCallError("Ollama returned an empty response.", status_code=502)
+        raise ProviderCallError("Ollama returned an empty response.", status_code=502, extra_secrets=extra_secrets)
     return text, {"eval_count": data.get("eval_count")}
 
 
@@ -335,11 +571,21 @@ def _call_anthropic(
     json_schema: dict[str, Any],
     mode: StructuredMode,
     temperature: float,
+    *,
+    max_tokens: int = 4096,
+    custom_auth_header: str | None = None,
+    custom_auth_prefix: str | None = None,
+    extra_secrets: Iterable[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    url = f"{base_url}/v1/messages"
+    if base_url.endswith("/v1/messages"):
+        url = base_url
+    elif base_url.endswith("/v1"):
+        url = f"{base_url}/messages"
+    else:
+        url = f"{base_url}/v1/messages"
     payload: dict[str, Any] = {
         "model": model_id,
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
         "temperature": temperature,
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}],
@@ -354,16 +600,25 @@ def _call_anthropic(
         ]
         payload["tool_choice"] = {"type": "tool", "name": "emit_process_graph"}
 
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
+    }
+    _apply_custom_auth(
+        headers,
+        api_key,
+        default_header="x-api-key",
+        default_prefix="",
+        custom_auth_header=custom_auth_header,
+        custom_auth_prefix=custom_auth_prefix,
+    )
     data = _post_bounded_json(
         client,
         url,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        },
+        headers=headers,
         payload=payload,
         provider_name="Anthropic",
+        extra_secrets=extra_secrets,
     )
     blocks = data.get("content") or []
     for block in blocks:
@@ -371,7 +626,7 @@ def _call_anthropic(
             return json.dumps(block["input"], ensure_ascii=False), {"usage": data.get("usage") or {}}
     text = "".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text")
     if not text.strip():
-        raise ProviderCallError("Anthropic returned an empty response.", status_code=502)
+        raise ProviderCallError("Anthropic returned an empty response.", status_code=502, extra_secrets=extra_secrets)
     return text, {"usage": data.get("usage") or {}}
 
 
@@ -387,12 +642,19 @@ def _call_openai_compat(
     mode: StructuredMode,
     temperature: float,
     ssrf_mode: str,
+    *,
+    max_tokens: int = 4096,
+    custom_auth_header: str | None = None,
+    custom_auth_prefix: str | None = None,
+    extra_secrets: Iterable[str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     effective_model = model_id
     if provider.id == "groq" and model_id == "gpt-oss-120b":
         effective_model = "openai/gpt-oss-120b"
 
-    if provider.id == "lmstudio" and not base_url.endswith("/v1"):
+    if base_url.endswith("/chat/completions"):
+        url = base_url
+    elif provider.id == "lmstudio" and not base_url.endswith("/v1"):
         url = f"{base_url}/v1/chat/completions"
     else:
         url = f"{base_url}/chat/completions"
@@ -402,7 +664,14 @@ def _call_openai_compat(
 
     headers: dict[str, str] = {"Content-Type": "application/json"}
     if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+        _apply_custom_auth(
+            headers,
+            api_key,
+            default_header="Authorization",
+            default_prefix="Bearer",
+            custom_auth_header=custom_auth_header,
+            custom_auth_prefix=custom_auth_prefix,
+        )
     elif provider.id == "lmstudio":
         headers["Authorization"] = "Bearer lm-studio"
 
@@ -419,10 +688,10 @@ def _call_openai_compat(
         ],
     }
     if is_openai_reasoning:
-        payload["max_completion_tokens"] = 4096
+        payload["max_completion_tokens"] = max_tokens
     else:
         payload["temperature"] = temperature
-        payload["max_tokens"] = 4096
+        payload["max_tokens"] = max_tokens
 
     if mode == "json_schema":
         payload["response_format"] = {
@@ -442,27 +711,50 @@ def _call_openai_compat(
         headers=headers,
         payload=payload,
         provider_name=provider.name,
+        extra_secrets=extra_secrets,
     )
     choices = data.get("choices") or []
     raw_content = ((choices[0].get("message") or {}).get("content")) if choices else None
     text = raw_content if isinstance(raw_content, str) else ""
     if not text.strip():
-        raise ProviderCallError(f"{provider.name} returned an empty response.", status_code=502)
+        raise ProviderCallError(f"{provider.name} returned an empty response.", status_code=502, extra_secrets=extra_secrets)
     return text, {"usage": data.get("usage") or {}}
 
 
-def _check_http_status(resp: httpx.Response, provider_name: str) -> None:
+def _check_http_status(
+    resp: httpx.Response,
+    provider_name: str,
+    *,
+    extra_secrets: Iterable[str] | None = None,
+) -> None:
     if 300 <= resp.status_code < 400:
-        raise ProviderCallError(f"HTTP redirect blocked by security policy for {provider_name}.", status_code=502)
+        raise ProviderCallError(
+            f"HTTP redirect blocked by security policy for {provider_name}.",
+            status_code=502,
+            extra_secrets=extra_secrets,
+        )
     if resp.status_code in (401, 403):
-        raise ProviderCallError(f"Credentials rejected by {provider_name} (HTTP {resp.status_code}). Check your API Key.", status_code=401)
+        raise ProviderCallError(
+            f"Credentials rejected by {provider_name} (HTTP {resp.status_code}). Check your API Key.",
+            status_code=401,
+            extra_secrets=extra_secrets,
+        )
     if resp.status_code == 429:
-        raise ProviderCallError(f"Rate limit or quota exceeded on {provider_name} (HTTP 429).", status_code=429)
+        raise ProviderCallError(
+            f"Rate limit or quota exceeded on {provider_name} (HTTP 429).",
+            status_code=429,
+            extra_secrets=extra_secrets,
+        )
     if resp.status_code in (400, 422):
         raise ProviderCallError(
-            f"{provider_name} rejected the structured output format (HTTP {resp.status_code}).",
+            f"{provider_name} rejected the request format (HTTP {resp.status_code}).",
             status_code=400,
             retryable_mode=True,
+            extra_secrets=extra_secrets,
         )
     if resp.status_code >= 400:
-        raise ProviderCallError(f"Remote error from {provider_name} (HTTP {resp.status_code}).", status_code=502)
+        raise ProviderCallError(
+            f"Remote error from {provider_name} (HTTP {resp.status_code}).",
+            status_code=502,
+            extra_secrets=extra_secrets,
+        )

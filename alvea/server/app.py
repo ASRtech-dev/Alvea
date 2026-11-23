@@ -22,18 +22,20 @@ from alvea import __app_name__, __version__
 from alvea.ai.catalog import catalog_as_json
 from alvea.ai.pipeline import ProcessPipeline
 from alvea.ai.prompts import SYSTEM_PROMPT_COMPACT, SYSTEM_PROMPT_FULL
-from alvea.ai.providers import ProviderCallError, discover_local_models
+from alvea.ai.providers import ProviderCallError, discover_local_models, test_provider_connection
 from alvea.config import SETTINGS, STATIC_ROOT
+from alvea.engine.sop import render_sop_markdown
 from alvea.exporters.data_exporter import (
     export_json_bytes,
     export_yaml_bytes,
     import_yaml_to_graph,
 )
-from alvea.exporters.pdf_exporter import export_executive_pdf
+from alvea.exporters.pdf_exporter import export_executive_pdf, export_sop_pdf
 from alvea.models import (
     ExportRequest,
     GenerateRequest,
     ImportYamlRequest,
+    TestProviderRequest,
     ValidateMermaidRequest,
 )
 from alvea.security import (
@@ -253,6 +255,27 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
 
         try:
+            if path == "/api/v1/providers/test":
+                if not self.server.rate_limiter.allow(self.client_address[0]):
+                    self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Too many connection test requests."})
+                    return
+                body = self._read_json_body(SETTINGS.max_analyze_body_bytes)
+                header_key = self.headers.get("X-API-Key")
+                if header_key and "api_key" not in body:
+                    body["api_key"] = header_key
+                req = TestProviderRequest.model_validate(body)
+                result = test_provider_connection(
+                    provider_id=req.provider,
+                    model_id=req.model,
+                    api_key=req.api_key.get_secret_value() if req.api_key else None,
+                    custom_base_url=req.base_url,
+                    custom_protocol=req.custom_protocol,
+                    custom_auth_header=req.custom_auth_header,
+                    custom_auth_prefix=req.custom_auth_prefix,
+                )
+                self._send_json(HTTPStatus.OK, result)
+                return
+
             if path == "/api/v1/generate":
                 if not self.server.rate_limiter.allow(self.client_address[0]):
                     self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Too many requests. Please retry shortly."})
@@ -271,6 +294,9 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                     title=req.title,
                     api_key=req.api_key.get_secret_value() if req.api_key else None,
                     base_url=req.base_url,
+                    custom_protocol=req.custom_protocol,
+                    custom_auth_header=req.custom_auth_header,
+                    custom_auth_prefix=req.custom_auth_prefix,
                     allow_native_fallback=req.allow_native_fallback,
                 )
                 self._send_json(
@@ -280,6 +306,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                         "mermaid": outcome.mermaid,
                         "analytics": outcome.analytics,
                         "report": outcome.report,
+                        "sop": outcome.sop,
                         "validation": outcome.validation,
                         "meta": outcome.meta,
                     },
@@ -303,9 +330,46 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                         "mermaid": outcome.mermaid,
                         "analytics": outcome.analytics,
                         "report": outcome.report,
+                        "sop": outcome.sop,
                         "validation": outcome.validation,
                         "meta": outcome.meta,
                     },
+                )
+                return
+
+            if path in ("/api/v1/export/sop/pdf", "/api/v1/export/sop/markdown", "/api/v1/export/sop/md"):
+                if path.endswith("/pdf") and not self.server.rate_limiter.allow(self.client_address[0]):
+                    self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Too many SOP export requests."})
+                    return
+                limit = SETTINGS.max_body_bytes if path.endswith("/pdf") else SETTINGS.max_analyze_body_bytes
+                body = self._read_json_body(limit)
+                req = ExportRequest.model_validate(body)
+                outcome = self._resolve_export_outcome(req)
+                analytics_obj = self.server.pipeline.analyzer.analyze(outcome.graph)
+                sop_obj = self.server.pipeline.sop_generator.generate(outcome.graph, analytics_obj)
+
+                if path.endswith("/pdf"):
+                    sop_pdf = export_sop_pdf(
+                        sop=sop_obj,
+                        graph=outcome.graph,
+                        diagram_png_base64=req.diagram_png_base64,
+                    )
+                    self._send_bytes(
+                        HTTPStatus.OK,
+                        sop_pdf,
+                        content_type="application/pdf",
+                        is_api=True,
+                        download_filename="alvea_sop_document.pdf",
+                    )
+                    return
+
+                sop_md = render_sop_markdown(sop_obj).encode("utf-8")
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    sop_md,
+                    content_type="text/markdown; charset=utf-8",
+                    is_api=True,
+                    download_filename="alvea_sop_document.md",
                 )
                 return
 
@@ -375,6 +439,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                 graph = import_yaml_to_graph(req.yaml_content)
                 analytics = self.server.pipeline.analyzer.analyze(graph)
                 report = self.server.pipeline.report_builder.build(graph, analytics)
+                sop = self.server.pipeline.sop_generator.generate(graph, analytics)
                 mermaid = self.server.pipeline.mermaid_gen.render(graph)
                 self._send_json(
                     HTTPStatus.OK,
@@ -383,6 +448,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                         "mermaid": mermaid,
                         "analytics": analytics.model_dump(mode="json"),
                         "report": report.model_dump(mode="json"),
+                        "sop": sop.model_dump(mode="json"),
                     },
                 )
                 return

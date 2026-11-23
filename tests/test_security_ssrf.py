@@ -6,7 +6,14 @@ import socket
 import unittest
 from unittest.mock import patch
 
-from alvea.security.ssrf import SSRFBlockedError, validate_model_id, validate_outbound_url
+from alvea.security.redaction import redact_secrets
+from alvea.security.ssrf import (
+    SSRFBlockedError,
+    validate_custom_auth_header,
+    validate_header_value,
+    validate_model_id,
+    validate_outbound_url,
+)
 
 
 class TestSSRFProtection(unittest.TestCase):
@@ -70,6 +77,39 @@ class TestSSRFProtection(unittest.TestCase):
 
         self.assertEqual(validate_model_id("qwen/qwen3.8-27b:free"), "qwen/qwen3.8-27b:free")
         self.assertEqual(validate_model_id("gemini-3.8-flash"), "gemini-3.8-flash")
+
+    def test_blocks_forbidden_custom_auth_headers_and_crlf_injection(self) -> None:
+        bad_headers = [
+            "Host",
+            "Transfer-Encoding",
+            "Content-Length",
+            "Cookie",
+            "X-Forwarded-For",
+            "Proxy-Authorization",
+            "X-Evil\r\nInjected: 1",
+            "Bad Header With Space",
+            "123-StartsWithDigit",
+        ]
+        for hdr in bad_headers:
+            with self.subTest(header=hdr):
+                with self.assertRaises(SSRFBlockedError):
+                    validate_custom_auth_header(hdr)
+
+        self.assertEqual(validate_custom_auth_header("X-API-Key"), "X-API-Key")
+        self.assertEqual(validate_custom_auth_header("Authorization"), "Authorization")
+        self.assertIsNone(validate_custom_auth_header("   "))
+
+        with self.assertRaises(SSRFBlockedError):
+            validate_header_value("my_token\r\nX-Injected: yes")
+
+    def test_redacts_arbitrary_custom_secret_literally(self) -> None:
+        custom_secret = "my_custom_secret_token_999"
+        redacted = redact_secrets(
+            f"Remote error echoing {custom_secret} during handshake",
+            extra_secrets=(custom_secret,),
+        )
+        self.assertNotIn(custom_secret, redacted)
+        self.assertIn("[REDACTED_CUSTOM_KEY]", redacted)
 
 
 if __name__ == "__main__":

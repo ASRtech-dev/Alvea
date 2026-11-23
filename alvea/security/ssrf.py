@@ -38,6 +38,55 @@ BLOCKED_METADATA_HOSTS: frozenset[str] = frozenset({
 })
 
 MODEL_ID_REGEX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:/@-]{0,119}$")
+HEADER_NAME_REGEX = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,63}$")
+
+FORBIDDEN_CUSTOM_HEADERS: frozenset[str] = frozenset({
+    "host",
+    "content-length",
+    "transfer-encoding",
+    "connection",
+    "upgrade",
+    "te",
+    "trailer",
+    "cookie",
+    "set-cookie",
+    "origin",
+    "referer",
+    "content-type",
+    "forwarded",
+    "accept-encoding",
+    "keep-alive",
+})
+
+
+def validate_custom_auth_header(header_name: str | None) -> str | None:
+    """Strictly validates a custom authentication header name against header injection & smuggling."""
+    if header_name is None:
+        return None
+    cleaned = header_name.strip()
+    if not cleaned:
+        return None
+    if any(ord(ch) < 33 or ord(ch) > 126 for ch in cleaned):
+        raise SSRFBlockedError("Custom auth header contains forbidden control or non-ASCII characters.")
+    if not HEADER_NAME_REGEX.fullmatch(cleaned):
+        raise SSRFBlockedError("Invalid custom auth header format. Use ASCII letters, digits, and hyphens.")
+    lowered = cleaned.lower()
+    if (
+        lowered in FORBIDDEN_CUSTOM_HEADERS
+        or lowered.startswith("x-forwarded-")
+        or lowered.startswith("proxy-")
+        or lowered.startswith("sec-")
+    ):
+        raise SSRFBlockedError(f"Header '{cleaned}' is blocked by security policy.")
+    return cleaned
+
+
+def validate_header_value(val: str) -> str:
+    """Rejects CRLF, NUL, or non-ASCII characters in outbound HTTP header values."""
+    cleaned = (val or "").strip()
+    if any(ch in cleaned for ch in ("\r", "\n", "\x00")) or any(ord(ch) < 32 or ord(ch) > 126 for ch in cleaned):
+        raise SSRFBlockedError("Credential or header value contains invalid control or non-ASCII characters.")
+    return cleaned
 
 
 def validate_model_id(model_id: str) -> str:
