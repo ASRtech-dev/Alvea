@@ -395,3 +395,16 @@ class ExportRequest(BaseModel):
 
 class ImportYamlRequest(BaseModel):
     yaml_content: str = Field(..., min_length=10, max_length=50_000)
+
+
+class StructuredWorkflowRequest(BaseModel):
+    """Typed graph payload submitted directly by the No-Code Visual Builder."""
+
+    title: str = Field(default="Business Process Workflow", min_length=1, max_length=120)
+    objective: str = Field(default="", max_length=280)
+    direction: Direction = Direction.LR
+    highlight_critical: bool = False
+    align_ends_right: bool = True
+    lanes: list[ActorLane] = Field(..., min_length=1, max_length=16)
+    nodes: list[ProcessNode] = Field(..., min_length=1, max_length=80)
+    edges: list[ProcessEdge] = Field(default_factory=list, max_length=200)

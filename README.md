@@ -2,7 +2,7 @@
 
 > *"From operational narrative to executive architecture."*
 
-**ALVEA v3.1** is a clean, offline-first web studio backed by **Python**, **NetworkX** graph theory, **ReportLab** executive & SOP PDF generation, and a hybrid **Local / Multi-LLM / Custom API** workflow engine. It converts free-form or structured process descriptions into executive **Mermaid.js Swimlane diagrams**, real-time structural diagnostics, an **Executive Report**, and an ISO-style **Standard Operating Procedure (SOP)** — with live **Prompting Design coaching** and an offline user guide built directly into the application.
+**ALVEA v4.0** is a clean, offline-first web studio backed by **Python**, a **True BPMN 2.0 Horizontal Swimlane SVG Engine**, **NetworkX** graph theory, **ReportLab** executive & SOP PDF generation, a **No-Code Visual Workflow Builder (Dropdowns)**, and a hybrid **Local / Multi-LLM / Custom API** workflow engine. It converts structured dropdown flows or free-form narratives into strict Left-to-Right **BPMN 2.0 Swimlane diagrams**, Mermaid.js code, real-time structural diagnostics, an **Executive Report**, and an ISO-style **Standard Operating Procedure (SOP)**.
 
 ---
 

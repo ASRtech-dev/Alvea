@@ -356,7 +356,7 @@ body {
 /* ─── App Shell (Two Columns) ────────────────────────────────────────────── */
 .app-shell {
   display: grid;
-  grid-template-columns: 400px minmax(0, 1fr);
+  grid-template-columns: 420px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -1761,4 +1761,263 @@ kbd {
   background-color: color-mix(in srgb, var(--sem-end) 12%, transparent);
   border-color: color-mix(in srgb, var(--sem-end) 35%, transparent);
   color: var(--sem-end);
+}
+
+/* ─── v4.0 Mode Switcher, Visual Builder & Renderer Toggle ───────────────── */
+.mode-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 0.25rem;
+  padding: 0.24rem;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-subtle);
+  border: 1px solid var(--border-hairline);
+}
+
+.mode-tab {
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.77rem;
+  font-weight: 600;
+  padding: 0.42rem 0.55rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.mode-tab.active {
+  background-color: var(--surface-elevated);
+  color: var(--accent-brand);
+  box-shadow: var(--shadow-sm);
+}
+
+.mode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.layout-card {
+  gap: 0.65rem;
+}
+
+.layout-controls--compact {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Renderer Toggle in Viewport Toolbar */
+.renderer-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-subtle);
+  border: 1px solid var(--border-hairline);
+}
+
+.renderer-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.73rem;
+  font-weight: 600;
+  padding: 0.26rem 0.56rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.renderer-btn.active {
+  background-color: var(--surface-elevated);
+  color: var(--accent-brand);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Visual Builder Teams & Steps */
+.team-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.team-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.45rem 0.2rem 0.52rem;
+  border-radius: 999px;
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border-hairline);
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.team-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.team-chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.team-chip-remove:hover {
+  color: var(--sem-end);
+}
+
+.vb-add-team-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 78px auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.vb-kind-select {
+  padding-inline: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.vb-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.vb-step-card {
+  background-color: var(--surface-elevated);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.vb-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.42rem 0.55rem;
+  background-color: color-mix(in srgb, var(--surface-subtle) 55%, var(--surface-elevated));
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+}
+
+.vb-step-card--expanded .vb-step-header {
+  border-bottom-color: var(--border-hairline);
+}
+
+.vb-step-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.vb-step-num {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-brand);
+}
+
+.vb-step-title-preview {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--ink-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vb-step-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  flex-shrink: 0;
+}
+
+.vb-step-body {
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.vb-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.vb-grid-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 0.45rem;
+}
+
+.vb-decision-box {
+  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--sem-decision) 45%, var(--border-hairline));
+  background-color: color-mix(in srgb, var(--sem-decision) 7%, var(--surface-canvas));
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.vb-branch-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 96px;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.vb-branch-badge {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.18rem 0.3rem;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+}
+
+.vb-branch-badge--true {
+  background-color: color-mix(in srgb, var(--sem-start) 16%, transparent);
+  color: var(--sem-start);
+}
+
+.vb-branch-badge--false {
+  background-color: color-mix(in srgb, var(--sem-end) 15%, transparent);
+  color: var(--sem-end);
+}
+
+.vb-branch-badge--par {
+  background-color: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+  color: var(--accent-brand);
+}
+
+.vb-add-step-btn {
+  width: 100%;
+  border-style: dashed;
+}
+
+.vb-empty-hint {
+  font-size: 0.74rem;
+  color: var(--ink-muted);
+  text-align: center;
+  padding: 0.55rem 0.4rem;
+  border: 1px dashed var(--border-hairline);
+  border-radius: var(--radius-sm);
 }

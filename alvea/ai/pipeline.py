@@ -28,6 +28,7 @@ from alvea.engine.mermaid import (
 from alvea.engine.nlp_parser import LocalBPAEngine
 from alvea.engine.report import ReportBuilder
 from alvea.engine.sop import SOPGenerator
+from alvea.engine.swimlane_svg import SwimlaneSVGRenderer
 from alvea.models import Direction, ProcessGraph
 from alvea.security import SSRFBlockedError
 
@@ -59,6 +60,7 @@ NODE_TYPE_ALIASES = {
 @dataclass
 class PipelineOutcome:
     graph: ProcessGraph
+    swimlane_svg: str
     mermaid: str
     analytics: dict[str, Any]
     report: dict[str, Any]
@@ -229,6 +231,31 @@ class ProcessPipeline:
         self.analyzer = GraphAnalyzer()
         self.report_builder = ReportBuilder()
         self.sop_generator = SOPGenerator()
+        self.swimlane_svg = SwimlaneSVGRenderer()
+
+    def build_from_graph(
+        self,
+        *,
+        graph: ProcessGraph,
+        direction: Direction = Direction.LR,
+        highlight_critical: bool = False,
+        align_ends_right: bool = True,
+    ) -> PipelineOutcome:
+        """Compiles a structured ProcessGraph from the Visual Builder directly into BPMN SVG + Mermaid + NetworkX + SOP."""
+        t0 = time.perf_counter()
+        graph.direction = direction
+        return self._finalize(
+            graph=graph,
+            direction=direction,
+            highlight_critical=highlight_critical,
+            align_ends_right=align_ends_right,
+            provider_id="visual_builder",
+            provider_name="Visual Builder + Python Engine",
+            model_id="structured-bpmn-v4",
+            stage="structured_graph",
+            fallback_notice=None,
+            started_at=t0,
+        )
 
     def generate(
         self,
@@ -352,6 +379,13 @@ class ProcessPipeline:
         analytics = self.analyzer.analyze(graph)
         report = self.report_builder.build(graph, analytics)
         sop = self.sop_generator.generate(graph, analytics)
+        svg_markup = self.swimlane_svg.render(
+            graph,
+            analytics=analytics,
+            direction=target_dir,
+            highlight_critical=highlight_critical,
+            align_ends_right=True,
+        )
 
         final_mermaid = (
             self.mermaid_gen.render(
@@ -367,6 +401,7 @@ class ProcessPipeline:
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
         return PipelineOutcome(
             graph=graph,
+            swimlane_svg=svg_markup,
             mermaid=final_mermaid,
             analytics=analytics.model_dump(),
             report=report.model_dump(),
@@ -504,10 +539,18 @@ class ProcessPipeline:
         stage: str,
         fallback_notice: str | None,
         started_at: float,
+        align_ends_right: bool = True,
     ) -> PipelineOutcome:
         analytics = self.analyzer.analyze(graph)
         report = self.report_builder.build(graph, analytics)
         sop = self.sop_generator.generate(graph, analytics)
+        svg_markup = self.swimlane_svg.render(
+            graph,
+            analytics=analytics,
+            direction=direction,
+            highlight_critical=highlight_critical,
+            align_ends_right=align_ends_right,
+        )
         mermaid_code = self.mermaid_gen.render(
             graph,
             direction=direction,
@@ -519,6 +562,7 @@ class ProcessPipeline:
 
         return PipelineOutcome(
             graph=graph,
+            swimlane_svg=svg_markup,
             mermaid=mermaid_code,
             analytics=analytics.model_dump(),
             report=report.model_dump(),

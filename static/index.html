@@ -69,85 +69,160 @@
   <!-- Main Workspace (Two Columns, 100dvh) -->
   <main class="app-shell">
 
-    <!-- Left Sidebar: Narrative, Engine, Cognitive Framework -->
+    <!-- Left Sidebar: Mode Switcher (Text/AI | Visual Builder), Controls, Cognitive Framework -->
     <aside class="sidebar" aria-label="Process configuration">
 
-      <!-- Workflow Narrative -->
-      <section class="panel-card">
-        <div class="card-header">
-          <label class="field-label" for="process-description">Workflow Narrative</label>
-          <button class="btn btn-ghost btn-xs" id="btn-clear-text" type="button">Clear</button>
-        </div>
-        <textarea
-          id="process-description"
-          class="field-control field-textarea"
-          rows="8"
-          placeholder="Describe or paste your workflow using prose, numbered steps, Actor: Action, or A -&gt; B: Action. Supports If / Else if / Otherwise, In parallel:, Returns to, and durations like 30m or 2h..."
-        ></textarea>
-        <div class="field-meta">
-          <span id="char-counter" class="tabular-nums">0 characters</span>
-          <span>Ctrl + Enter to generate</span>
-        </div>
+      <!-- Sidebar Input Mode Switcher -->
+      <div class="mode-switcher" role="tablist" aria-label="Workflow creation mode">
+        <button class="mode-tab active" id="mode-tab-narrative" role="tab" aria-selected="true" aria-controls="panel-narrative-mode" data-mode="narrative" type="button">
+          Text / AI
+        </button>
+        <button class="mode-tab" id="mode-tab-builder" role="tab" aria-selected="false" aria-controls="panel-builder-mode" data-mode="builder" type="button">
+          Visual Builder (Dropdowns)
+        </button>
+      </div>
 
-        <!-- Live Prompting Design Coach -->
-        <div class="prompt-coach" id="prompt-coach" aria-live="polite">
-          <div class="coach-header">
-            <span class="coach-title">Prompting Coach</span>
-            <button class="btn btn-ghost btn-xs" id="btn-prompt-guide" type="button">Prompting Guide →</button>
+      <!-- Mode A: Text / AI Narrative + LLM Engine -->
+      <div class="mode-panel" id="panel-narrative-mode" role="tabpanel" aria-labelledby="mode-tab-narrative">
+        <!-- Workflow Narrative -->
+        <section class="panel-card">
+          <div class="card-header">
+            <label class="field-label" for="process-description">Workflow Narrative</label>
+            <button class="btn btn-ghost btn-xs" id="btn-clear-text" type="button">Clear</button>
           </div>
-          <div class="coach-pills" role="list" aria-label="Workflow prompt completeness checks">
-            <span class="coach-pill" id="coach-actors" role="listitem" title="Name roles using 'Actor: Action' or 'A -> B: Action'">Actors</span>
-            <span class="coach-pill" id="coach-decisions" role="listitem" title="Add branches using 'If / Else if / Otherwise'">Decisions</span>
-            <span class="coach-pill" id="coach-durations" role="listitem" title="Add SLAs like '[30m]' or '[2h]' for cycle-time math">Durations</span>
-            <span class="coach-pill" id="coach-outcomes" role="listitem" title="Define explicit success/rejection end states">Outcomes</span>
-          </div>
-          <p class="coach-tip" id="coach-tip">Tip: Prefix steps with roles like "Finance: Review invoice [30m]" to generate clean swimlanes and SOP ownership.</p>
-        </div>
-      </section>
-
-      <!-- Provider + Model + Orientation -->
-      <section class="panel-card">
-        <div class="card-header">
-          <span class="field-label">Engine &amp; Intelligence</span>
-          <button class="credential-pill credential-pill--btn" id="credential-status" type="button" title="Click to configure API key or endpoint">No key required</button>
-        </div>
-
-        <div class="form-stack">
-          <div>
-            <label class="sub-label" for="provider-select">Provider</label>
-            <select id="provider-select" class="field-control"></select>
+          <textarea
+            id="process-description"
+            class="field-control field-textarea"
+            rows="7"
+            placeholder="Describe or paste your workflow using prose, numbered steps, Actor: Action, or A -&gt; B: Action. Supports If / Else if / Otherwise, In parallel:, Returns to, and durations like 30m or 2h..."
+          ></textarea>
+          <div class="field-meta">
+            <span id="char-counter" class="tabular-nums">0 characters</span>
+            <span>Ctrl + Enter to generate</span>
           </div>
 
-          <div class="model-row">
-            <div class="model-select-wrap">
-              <label class="sub-label" for="model-select">Model</label>
-              <select id="model-select" class="field-control"></select>
+          <!-- Live Prompting Design Coach -->
+          <div class="prompt-coach" id="prompt-coach" aria-live="polite">
+            <div class="coach-header">
+              <span class="coach-title">Prompting Coach</span>
+              <button class="btn btn-ghost btn-xs" id="btn-prompt-guide" type="button">Prompting Guide →</button>
             </div>
-            <button class="btn btn-outline btn-sm" id="btn-discover-models" type="button" hidden title="Probe locally installed models">
-              Auto-Discover
-            </button>
+            <div class="coach-pills" role="list" aria-label="Workflow prompt completeness checks">
+              <span class="coach-pill" id="coach-actors" role="listitem" title="Name roles using 'Actor: Action' or 'A -> B: Action'">Actors</span>
+              <span class="coach-pill" id="coach-decisions" role="listitem" title="Add branches using 'If / Else if / Otherwise'">Decisions</span>
+              <span class="coach-pill" id="coach-durations" role="listitem" title="Add SLAs like '[30m]' or '[2h]' for cycle-time math">Durations</span>
+              <span class="coach-pill" id="coach-outcomes" role="listitem" title="Define explicit success/rejection end states">Outcomes</span>
+            </div>
+            <p class="coach-tip" id="coach-tip">Tip: Prefix steps with roles like "Finance: Review invoice [30m]" to generate clean swimlanes and SOP ownership.</p>
+          </div>
+        </section>
+
+        <!-- Provider + Model -->
+        <section class="panel-card">
+          <div class="card-header">
+            <span class="field-label">Engine &amp; Intelligence</span>
+            <button class="credential-pill credential-pill--btn" id="credential-status" type="button" title="Click to configure API key or endpoint">No key required</button>
           </div>
 
-          <div class="provider-quick-actions">
-            <button class="btn btn-outline btn-xs" id="btn-sidebar-config-api" type="button">Configure API Key</button>
-            <button class="btn btn-outline btn-xs" id="btn-sidebar-add-custom" type="button">+ Add Custom API</button>
+          <div class="form-stack">
+            <div>
+              <label class="sub-label" for="provider-select">Provider</label>
+              <select id="provider-select" class="field-control"></select>
+            </div>
+
+            <div class="model-row">
+              <div class="model-select-wrap">
+                <label class="sub-label" for="model-select">Model</label>
+                <select id="model-select" class="field-control"></select>
+              </div>
+              <button class="btn btn-outline btn-sm" id="btn-discover-models" type="button" hidden title="Probe locally installed models">
+                Auto-Discover
+              </button>
+            </div>
+
+            <div class="provider-quick-actions">
+              <button class="btn btn-outline btn-xs" id="btn-sidebar-config-api" type="button">Configure API Key</button>
+              <button class="btn btn-outline btn-xs" id="btn-sidebar-add-custom" type="button">+ Add Custom API</button>
+            </div>
+
+            <div class="badge-row" id="provider-badges"></div>
+            <p class="provider-note" id="provider-note"></p>
+            <p class="provider-hint" id="provider-key-hint" hidden></p>
           </div>
+        </section>
+      </div>
 
-          <div class="badge-row" id="provider-badges"></div>
-          <p class="provider-note" id="provider-note"></p>
-          <p class="provider-hint" id="provider-key-hint" hidden></p>
-        </div>
+      <!-- Mode B: No-Code Visual Builder (Dropdowns -> Deterministic Python Engine) -->
+      <div class="mode-panel" id="panel-builder-mode" role="tabpanel" aria-labelledby="mode-tab-builder" hidden>
+        <section class="panel-card">
+          <div class="card-header">
+            <label class="field-label" for="vb-process-title">Visual Workflow Builder</label>
+            <span class="badge badge--local">Python · Instant</span>
+          </div>
+          <input type="text" id="vb-process-title" class="field-control" maxlength="120" placeholder="Process title (e.g. Support Ticket Resolution)">
+        </section>
 
-        <div class="layout-controls">
+        <!-- Teams / Swimlanes -->
+        <section class="panel-card vb-teams-card">
+          <div class="card-header">
+            <span class="field-label">1. Teams / Swimlanes (<span id="vb-team-count">0</span>)</span>
+            <button class="btn btn-ghost btn-xs" id="btn-vb-reset" type="button">Reset</button>
+          </div>
+          <div class="team-chips" id="vb-team-chips"></div>
+          <div class="vb-add-team-row">
+            <select id="vb-team-preset" class="field-control" aria-label="Select team to add">
+              <option value="Customer">Customer / Client</option>
+              <option value="System / Platform">System / Platform</option>
+              <option value="Customer Service">Customer Service</option>
+              <option value="Back-Office Team">Back-Office Team</option>
+              <option value="Sales / Intake">Sales / Intake</option>
+              <option value="Operations">Operations</option>
+              <option value="Finance">Finance</option>
+              <option value="Risk &amp; Compliance">Risk &amp; Compliance</option>
+              <option value="Legal">Legal</option>
+              <option value="IT / Engineering">IT / Engineering</option>
+              <option value="Human Resources">Human Resources</option>
+              <option value="Management">Management</option>
+              <option value="External Vendor">External Vendor</option>
+              <option value="__custom__">+ Custom Team…</option>
+            </select>
+            <select id="vb-team-kind" class="field-control vb-kind-select" aria-label="Team kind">
+              <option value="department">Dept</option>
+              <option value="human">Human</option>
+              <option value="system">System</option>
+              <option value="external">External</option>
+            </select>
+            <button class="btn btn-outline btn-sm" id="btn-vb-add-team" type="button">+ Add</button>
+          </div>
+          <div class="input-inline" id="vb-custom-team-wrap" hidden>
+            <input type="text" id="vb-custom-team-input" class="field-control" maxlength="60" placeholder="Type custom team name...">
+          </div>
+        </section>
+
+        <!-- Workflow Steps (Dropdown Cards) -->
+        <section class="panel-card vb-steps-card">
+          <div class="card-header">
+            <span class="field-label">2. Steps &amp; True/False Decisions (<span id="vb-step-count">0</span>)</span>
+          </div>
+          <div class="vb-steps-list" id="vb-steps-list"></div>
+          <button class="btn btn-outline btn-sm vb-add-step-btn" id="btn-vb-add-step" type="button">
+            + Add Step
+          </button>
+        </section>
+      </div>
+
+      <!-- Shared Swimlane Orientation + Critical Path + Generate -->
+      <section class="panel-card layout-card">
+        <div class="layout-controls layout-controls--compact">
           <fieldset class="segmented-control" aria-label="Diagram orientation">
             <legend class="sr-only">Diagram orientation</legend>
             <label class="seg-item">
               <input type="radio" name="direction" value="LR" checked>
-              <span>Horizontal (LR)</span>
+              <span>Horizontal (L → R)</span>
             </label>
             <label class="seg-item">
               <input type="radio" name="direction" value="TD">
-              <span>Vertical (TD)</span>
+              <span>Vertical (T → D)</span>
             </label>
           </fieldset>
 
@@ -156,13 +231,12 @@
             <span>Highlight Critical Path</span>
           </label>
         </div>
-      </section>
 
-      <!-- Primary Action -->
-      <button class="btn btn-primary btn-generate" id="btn-generate" type="button">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span id="btn-generate-label">Generate Architecture</span>
-      </button>
+        <button class="btn btn-primary btn-generate" id="btn-generate" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span id="btn-generate-label">Generate Architecture</span>
+        </button>
+      </section>
 
       <!-- Dynamic Cognitive Framework (Phases A, B, C) -->
       <details class="panel-card cognitive-card" open>
@@ -208,6 +282,11 @@
         </div>
 
         <div class="toolbar-actions">
+          <div class="renderer-toggle" role="group" aria-label="Diagram renderer">
+            <button class="renderer-btn active" id="btn-render-bpmn" type="button" title="True Horizontal Left-to-Right BPMN 2.0 Swimlane">BPMN Swimlane</button>
+            <button class="renderer-btn" id="btn-render-mermaid" type="button" title="Classic Mermaid.js Render">Mermaid</button>
+          </div>
+
           <div class="zoom-group" role="group" aria-label="Zoom controls">
             <button class="zoom-btn" id="btn-zoom-out" type="button" title="Zoom out (-)" disabled>−</button>
             <span class="zoom-value tabular-nums" id="zoom-label">100%</span>
@@ -302,7 +381,8 @@
             </div>
 
             <div class="empty-actions">
-              <button class="btn btn-primary btn-sm" id="btn-empty-focus" type="button">Write Workflow</button>
+              <button class="btn btn-primary btn-sm" id="btn-empty-builder" type="button">Visual Builder (Dropdowns)</button>
+              <button class="btn btn-outline btn-sm" id="btn-empty-focus" type="button">Write Workflow</button>
               <button class="btn btn-outline btn-sm" id="btn-empty-docs" type="button">Open User Guide</button>
               <label class="btn btn-outline btn-sm file-btn">
                 Import YAML
@@ -386,7 +466,7 @@
 
           <article class="docs-article">
             <header class="docs-hero">
-              <span class="badge badge--brand">Built-In Offline Reference · v3.1</span>
+              <span class="badge badge--brand">Built-In Offline Reference · v4.0</span>
               <h1 id="docs-main-heading" tabindex="-1">How to Use ALVEA</h1>
               <p>
                 ALVEA transforms plain-text or structured operational descriptions into executive

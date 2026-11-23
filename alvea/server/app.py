@@ -35,6 +35,8 @@ from alvea.models import (
     ExportRequest,
     GenerateRequest,
     ImportYamlRequest,
+    ProcessGraph,
+    StructuredWorkflowRequest,
     TestProviderRequest,
     ValidateMermaidRequest,
 )
@@ -276,6 +278,41 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.OK, result)
                 return
 
+            if path == "/api/v1/graph/build":
+                if not self.server.rate_limiter.allow(self.client_address[0]):
+                    self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Too many requests. Please retry shortly."})
+                    return
+                body = self._read_json_body(SETTINGS.max_analyze_body_bytes)
+                req = StructuredWorkflowRequest.model_validate(body)
+                graph = ProcessGraph(
+                    title=req.title,
+                    objective=req.objective,
+                    direction=req.direction,
+                    lanes=req.lanes,
+                    nodes=req.nodes,
+                    edges=req.edges,
+                )
+                outcome = self.server.pipeline.build_from_graph(
+                    graph=graph,
+                    direction=req.direction,
+                    highlight_critical=req.highlight_critical,
+                    align_ends_right=req.align_ends_right,
+                )
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "graph": outcome.graph.model_dump(mode="json"),
+                        "swimlane_svg": outcome.swimlane_svg,
+                        "mermaid": outcome.mermaid,
+                        "analytics": outcome.analytics,
+                        "report": outcome.report,
+                        "sop": outcome.sop,
+                        "validation": outcome.validation,
+                        "meta": outcome.meta,
+                    },
+                )
+                return
+
             if path == "/api/v1/generate":
                 if not self.server.rate_limiter.allow(self.client_address[0]):
                     self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Too many requests. Please retry shortly."})
@@ -303,6 +340,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {
                         "graph": outcome.graph.model_dump(mode="json"),
+                        "swimlane_svg": outcome.swimlane_svg,
                         "mermaid": outcome.mermaid,
                         "analytics": outcome.analytics,
                         "report": outcome.report,
@@ -327,6 +365,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                     HTTPStatus.OK,
                     {
                         "graph": outcome.graph.model_dump(mode="json"),
+                        "swimlane_svg": outcome.swimlane_svg,
                         "mermaid": outcome.mermaid,
                         "analytics": outcome.analytics,
                         "report": outcome.report,
@@ -441,10 +480,18 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                 report = self.server.pipeline.report_builder.build(graph, analytics)
                 sop = self.server.pipeline.sop_generator.generate(graph, analytics)
                 mermaid = self.server.pipeline.mermaid_gen.render(graph)
+                svg_markup = self.server.pipeline.swimlane_svg.render(
+                    graph,
+                    analytics=analytics,
+                    direction=graph.direction,
+                    highlight_critical=False,
+                    align_ends_right=True,
+                )
                 self._send_json(
                     HTTPStatus.OK,
                     {
                         "graph": graph.model_dump(mode="json"),
+                        "swimlane_svg": svg_markup,
                         "mermaid": mermaid,
                         "analytics": analytics.model_dump(mode="json"),
                         "report": report.model_dump(mode="json"),

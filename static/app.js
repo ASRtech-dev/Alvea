@@ -1,21 +1,70 @@
 /**
- * ALVEA v3.1 — Process Architecture & Intelligence Studio
- * Vanilla JS client (English default, zero presets, CSP strict 'self', zero innerHTML XSS).
+ * ALVEA v4.0 — Process Architecture & Intelligence Studio
+ * Vanilla JS client (True BPMN Swimlane SVG, No-Code Visual Builder, English default, CSP strict 'self', zero innerHTML XSS).
  */
 (() => {
   "use strict";
 
   const CUSTOM_APIS_STORAGE_KEY = "alvea_custom_apis";
+  const LANE_ACCENT_PALETTE = [
+    "#1E3A5F",
+    "#0284C7",
+    "#0D9488",
+    "#4338CA",
+    "#B45309",
+    "#7C3AED",
+    "#BE123C",
+    "#334155",
+  ];
+
+  const VB_ACTION_GROUPS = [
+    {
+      label: "Intake & Start",
+      items: ["Submit Request", "Receive Email / Ticket", "Capture Customer Data", "Initiate Workflow"],
+    },
+    {
+      label: "Automated / System",
+      items: ["Categorize & Route Automatically", "Validate Data via API", "Sync ERP / CRM Record", "Send Automated Confirmation"],
+    },
+    {
+      label: "Review & Decisions",
+      items: ["Review & Assess Request", "Solve Directly or Escalate?", "Approve Request?", "Validate Compliance / Risk?"],
+    },
+    {
+      label: "Execution & Handoff",
+      items: ["Resolve Issue Directly", "Escalate to Back-Office", "Process & Execute Action", "Wait for SLA / External Response"],
+    },
+    {
+      label: "Completion & End",
+      items: ["Case Resolved Successfully", "Request Approved & Closed", "Request Rejected & Archived"],
+    },
+  ];
+
+  const VB_DURATION_OPTIONS = [
+    { label: "None", val: "" },
+    { label: "5m", val: "5" },
+    { label: "15m", val: "15" },
+    { label: "30m", val: "30" },
+    { label: "1h", val: "60" },
+    { label: "2h", val: "120" },
+    { label: "4h", val: "240" },
+    { label: "24h", val: "1440" },
+    { label: "48h", val: "2880" },
+    { label: "72h", val: "4320" },
+  ];
 
   // ─── 1. Application State ──────────────────────────────────────────────────
   const state = {
     providers: [],
     customApis: [],     // Non-secret custom API definitions in localStorage (keys remain in state.apiKeys RAM/session)
     editingCustomId: null,
+    inputMode: "narrative", // "narrative" | "builder"
+    rendererMode: "bpmn",   // "bpmn" (True Swimlane SVG) | "mermaid"
     currentProvider: "native_python",
     currentModel: "alvea-bpa-v3",
     direction: "LR",
     highlightCritical: false,
+    currentSwimlaneSvg: "",
     currentMermaid: "",
     currentGraph: null,
     currentAnalytics: null,
@@ -37,6 +86,12 @@
     historyIndex: -1,
     systemPromptText: "",
     coachTimer: null,
+    vb: {
+      teams: [],        // [{ id, name, kind }]
+      steps: [],        // [{ id, teamId, nodeType, actionPreset, customLabel, durationMin, nextStepId, trueTargetId, trueLabel, falseTargetId, falseLabel, parTargetA, parTargetB }]
+      expandedId: null,
+      nextSeq: 1,
+    },
   };
 
   // ─── 2. DOM References ─────────────────────────────────────────────────────
@@ -54,6 +109,23 @@
     btnShortcuts: $("btn-shortcuts"),
     btnThemeToggle: $("btn-theme-toggle"),
     themeLabel: $("theme-label"),
+
+    modeTabNarrative: $("mode-tab-narrative"),
+    modeTabBuilder: $("mode-tab-builder"),
+    panelNarrativeMode: $("panel-narrative-mode"),
+    panelBuilderMode: $("panel-builder-mode"),
+    vbProcessTitle: $("vb-process-title"),
+    vbTeamCount: $("vb-team-count"),
+    vbTeamChips: $("vb-team-chips"),
+    vbTeamPreset: $("vb-team-preset"),
+    vbTeamKind: $("vb-team-kind"),
+    btnVbAddTeam: $("btn-vb-add-team"),
+    btnVbReset: $("btn-vb-reset"),
+    vbCustomTeamWrap: $("vb-custom-team-wrap"),
+    vbCustomTeamInput: $("vb-custom-team-input"),
+    vbStepCount: $("vb-step-count"),
+    vbStepsList: $("vb-steps-list"),
+    btnVbAddStep: $("btn-vb-add-step"),
 
     processDescription: $("process-description"),
     charCounter: $("char-counter"),
@@ -83,6 +155,8 @@
     cognitiveRoutesText: $("cognitive-routes-text"),
 
     tabButtons: Array.from(document.querySelectorAll(".tab-btn[data-tab]")),
+    btnRenderBpmn: $("btn-render-bpmn"),
+    btnRenderMermaid: $("btn-render-mermaid"),
     viewVisual: $("view-visual"),
     viewEditor: $("view-editor"),
     viewReport: $("view-report"),
@@ -98,6 +172,7 @@
     btnExportSopPdf: $("btn-export-sop-pdf"),
 
     canvasEmptyState: $("canvas-empty-state"),
+    btnEmptyBuilder: $("btn-empty-builder"),
     btnEmptyFocus: $("btn-empty-focus"),
     btnEmptyDocs: $("btn-empty-docs"),
     inputEmptyImportYaml: $("input-empty-import-yaml"),
@@ -248,17 +323,21 @@
   function safeMountSvg(container, svgMarkup) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgMarkup, "image/svg+xml");
+    if (doc.querySelector("parsererror")) {
+      throw new Error("SVG parser encountered invalid XML markup.");
+    }
     const svgEl = doc.documentElement;
     if (!svgEl || svgEl.tagName.toLowerCase() !== "svg") {
-      throw new Error("Mermaid renderer did not return a valid SVG element.");
+      throw new Error("Renderer did not return a valid SVG element.");
     }
-    svgEl.querySelectorAll("script, iframe, object, embed, foreignObject").forEach((n) => n.remove());
+    svgEl.querySelectorAll("script, iframe, object, embed, foreignObject, animate, set, use").forEach((n) => n.remove());
     [svgEl, ...svgEl.querySelectorAll("*")].forEach((elem) => {
       for (const attr of Array.from(elem.attributes)) {
         const name = attr.name.toLowerCase();
         const val = attr.value.replace(/[\x00-\x20]+/g, "").toLowerCase();
         if (
           name.startsWith("on") ||
+          ((name === "href" || name === "xlink:href") && !val.startsWith("#")) ||
           val.startsWith("javascript:") ||
           val.startsWith("vbscript:") ||
           val.startsWith("data:text/html")
@@ -461,6 +540,8 @@
     bindEvents();
     setDiagramControlsEnabled(false);
     updatePromptCoach();
+    renderVbTeams();
+    renderVbSteps();
 
     await Promise.all([loadHealth(), loadProviders()]);
     setStatus("ok", "Ready — Enter a workflow or open Guide to begin.");
@@ -819,7 +900,41 @@
     }
   }
 
+  async function rebuildCurrentGraph({ pushHistory = false, label = "Layout Update" } = {}) {
+    if (!state.currentGraph) {
+      if (state.currentMermaid) {
+        return validateAndApplyMermaid(state.currentMermaid, { direction: state.direction, pushHistory, label });
+      }
+      return;
+    }
+    setBusy(true, "Updating BPMN Swimlane layout & NetworkX…");
+    try {
+      const resp = await fetch("/api/v1/graph/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: state.currentGraph.title || "Business Process Workflow",
+          objective: state.currentGraph.objective || "",
+          direction: state.direction,
+          highlight_critical: state.highlightCritical,
+          align_ends_right: true,
+          lanes: state.currentGraph.lanes,
+          nodes: state.currentGraph.nodes,
+          edges: state.currentGraph.edges,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || `HTTP error ${resp.status}`);
+      await applyPipelineResult(data, { pushHistory, label });
+    } catch (err) {
+      showToast(err.message, true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyPipelineResult(data, { pushHistory = true, label = "Snapshot" } = {}) {
+    state.currentSwimlaneSvg = data.swimlane_svg || "";
     state.currentMermaid = data.mermaid || "";
     state.currentGraph = data.graph || null;
     state.currentAnalytics = data.analytics || null;
@@ -827,7 +942,7 @@
     state.currentSop = data.sop || null;
     state.currentMeta = data.meta || null;
 
-    setDiagramControlsEnabled(Boolean(state.currentMermaid));
+    setDiagramControlsEnabled(Boolean(state.currentMermaid || state.currentSwimlaneSvg));
     el.mermaidCodeInput.value = state.currentMermaid;
     renderValidationBanner(data.validation);
     renderMetricsStrip(state.currentAnalytics);
@@ -836,13 +951,37 @@
     renderSopDocument(state.currentSop);
     renderDataPreview();
 
-    await renderMermaidSvg(state.currentMermaid);
+    await renderActiveDiagram();
 
     if (pushHistory) pushSnapshot(label);
 
     const meta = state.currentMeta || {};
-    el.telemetryText.textContent = `${meta.provider_name || "ALVEA"} · ${meta.model || ""} · ${meta.elapsed_ms ?? 0} ms · graph ${state.direction}`;
-    setStatus("ok", "Architecture, Executive Report & SOP rendered.");
+    const modeTag = state.rendererMode === "bpmn" ? "BPMN Swimlane" : "Mermaid";
+    el.telemetryText.textContent = `${meta.provider_name || "ALVEA"} · ${meta.model || ""} · ${meta.elapsed_ms ?? 0} ms · ${modeTag} (${state.direction})`;
+    setStatus("ok", "True BPMN Swimlane, Executive Report & SOP rendered.");
+  }
+
+  async function renderActiveDiagram() {
+    if (state.rendererMode === "bpmn" && state.currentSwimlaneSvg) {
+      try {
+        safeMountSvg(el.mermaidTarget, state.currentSwimlaneSvg);
+        resetZoom();
+        requestAnimationFrame(() => fitZoom());
+        return;
+      } catch (err) {
+        showToast(err.message || "BPMN Swimlane render failed, switching to Mermaid.", true);
+      }
+    }
+    await renderMermaidSvg(state.currentMermaid);
+  }
+
+  function setRendererMode(mode) {
+    state.rendererMode = mode === "mermaid" ? "mermaid" : "bpmn";
+    el.btnRenderBpmn?.classList.toggle("active", state.rendererMode === "bpmn");
+    el.btnRenderMermaid?.classList.toggle("active", state.rendererMode === "mermaid");
+    if (state.currentSwimlaneSvg || state.currentMermaid) {
+      renderActiveDiagram();
+    }
   }
 
   async function renderMermaidSvg(code) {
@@ -1289,6 +1428,7 @@
       label,
       direction: state.direction,
       description: el.processDescription.value,
+      swimlane_svg: state.currentSwimlaneSvg,
       mermaid: state.currentMermaid,
       graph: state.currentGraph,
       analytics: state.currentAnalytics,
@@ -2021,6 +2161,636 @@
     });
   }
 
+  // ─── 13b. No-Code Visual Workflow Builder (Dropdowns -> /api/v1/graph/build) ──
+  function setInputMode(mode) {
+    state.inputMode = mode === "builder" ? "builder" : "narrative";
+    const isBuilder = state.inputMode === "builder";
+    el.modeTabNarrative.classList.toggle("active", !isBuilder);
+    el.modeTabNarrative.setAttribute("aria-selected", String(!isBuilder));
+    el.modeTabBuilder.classList.toggle("active", isBuilder);
+    el.modeTabBuilder.setAttribute("aria-selected", String(isBuilder));
+    el.panelNarrativeMode.hidden = isBuilder;
+    el.panelBuilderMode.hidden = !isBuilder;
+    el.btnGenerateLabel.textContent = isBuilder ? "Build Swimlane (Python)" : "Generate Architecture";
+  }
+
+  function vbTeamColor(teamId) {
+    const idx = state.vb.teams.findIndex((t) => t.id === teamId);
+    return LANE_ACCENT_PALETTE[(idx >= 0 ? idx : 0) % LANE_ACCENT_PALETTE.length];
+  }
+
+  function inferTeamKind(name) {
+    const low = name.toLowerCase();
+    if (low.includes("system") || low.includes("platform") || low.includes("api") || low.includes("erp")) return "system";
+    if (low.includes("customer") || low.includes("client") || low.includes("management")) return "human";
+    if (low.includes("vendor") || low.includes("external") || low.includes("partner")) return "external";
+    return "department";
+  }
+
+  function addVbTeam(nameRaw = null, kindRaw = null) {
+    const presetVal = el.vbTeamPreset.value;
+    const isCustom = presetVal === "__custom__";
+    const name = (nameRaw !== null ? nameRaw : isCustom ? el.vbCustomTeamInput.value : presetVal).trim();
+    if (!name) {
+      showToast("Enter a team or role name first.", true);
+      if (isCustom) el.vbCustomTeamInput.focus();
+      return null;
+    }
+    const existing = state.vb.teams.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      showToast(`Team '${existing.name}' is already added.`);
+      return existing;
+    }
+    if (state.vb.teams.length >= 16) {
+      showToast("Maximum of 16 teams/swimlanes reached.", true);
+      return null;
+    }
+    const kind = kindRaw || el.vbTeamKind.value || inferTeamKind(name);
+    const team = {
+      id: `L_${state.vb.nextSeq++}`,
+      name: name.slice(0, 60),
+      kind,
+    };
+    state.vb.teams.push(team);
+    if (isCustom) {
+      el.vbCustomTeamInput.value = "";
+    }
+    renderVbTeams();
+    renderVbSteps();
+    return team;
+  }
+
+  function removeVbTeam(teamId) {
+    const usedBy = state.vb.steps.some((s) => s.teamId === teamId);
+    if (usedBy) {
+      showToast("Reassign or delete steps using this team before removing it.", true);
+      return;
+    }
+    state.vb.teams = state.vb.teams.filter((t) => t.id !== teamId);
+    renderVbTeams();
+    renderVbSteps();
+  }
+
+  function renderVbTeams() {
+    el.vbTeamCount.textContent = String(state.vb.teams.length);
+    el.vbTeamChips.replaceChildren();
+    if (!state.vb.teams.length) {
+      el.vbTeamChips.appendChild(
+        h("span", {
+          className: "hint-text",
+          text: "Pick a team below and click + Add (or click + Add Step to auto-add).",
+        })
+      );
+      return;
+    }
+    state.vb.teams.forEach((team, idx) => {
+      const color = LANE_ACCENT_PALETTE[idx % LANE_ACCENT_PALETTE.length];
+      const dot = h("span", { className: "team-dot" });
+      dot.style.backgroundColor = color;
+      el.vbTeamChips.appendChild(
+        h(
+          "span",
+          { className: "team-chip" },
+          dot,
+          h("span", { text: team.name }),
+          h("button", {
+            className: "team-chip-remove",
+            type: "button",
+            title: `Remove ${team.name}`,
+            "aria-label": `Remove ${team.name}`,
+            text: "×",
+            onClick: () => removeVbTeam(team.id),
+          })
+        )
+      );
+    });
+  }
+
+  function addVbStep() {
+    if (state.vb.steps.length >= 60) {
+      showToast("Maximum of 60 steps in Visual Builder reached.", true);
+      return;
+    }
+    if (!state.vb.teams.length) {
+      const preset = el.vbTeamPreset.value === "__custom__" ? "Customer" : el.vbTeamPreset.value;
+      addVbTeam(preset, inferTeamKind(preset));
+    }
+    const isFirst = state.vb.steps.length === 0;
+    const defaultTeam = state.vb.teams[state.vb.teams.length - 1];
+    const stepId = `S_${state.vb.nextSeq++}`;
+    const step = {
+      id: stepId,
+      teamId: defaultTeam.id,
+      nodeType: isFirst ? "start" : "task",
+      actionPreset: isFirst ? "Submit Request" : "Review & Assess Request",
+      customLabel: "",
+      durationMin: isFirst ? "" : "15",
+      nextStepId: "__auto__",
+      trueTargetId: "__auto__",
+      trueLabel: "Yes",
+      falseTargetId: "__none__",
+      falseLabel: "No",
+      parTargetA: "__auto__",
+      parTargetB: "__none__",
+    };
+    state.vb.steps.push(step);
+    state.vb.expandedId = stepId;
+    renderVbSteps();
+  }
+
+  function moveVbStep(index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= state.vb.steps.length) return;
+    const [item] = state.vb.steps.splice(index, 1);
+    state.vb.steps.splice(target, 0, item);
+    renderVbSteps();
+  }
+
+  function deleteVbStep(stepId) {
+    state.vb.steps = state.vb.steps.filter((s) => s.id !== stepId);
+    state.vb.steps.forEach((s) => {
+      if (s.nextStepId === stepId) s.nextStepId = "__auto__";
+      if (s.trueTargetId === stepId) s.trueTargetId = "__auto__";
+      if (s.falseTargetId === stepId) s.falseTargetId = "__none__";
+      if (s.parTargetA === stepId) s.parTargetA = "__auto__";
+      if (s.parTargetB === stepId) s.parTargetB = "__none__";
+    });
+    if (state.vb.expandedId === stepId) {
+      state.vb.expandedId = state.vb.steps[0]?.id || null;
+    }
+    renderVbSteps();
+  }
+
+  function getVbStepLabel(step) {
+    if (step.actionPreset === "__custom__") {
+      return step.customLabel.trim() || "Custom Step";
+    }
+    return step.actionPreset || "Step";
+  }
+
+  function buildTargetOptions(currentStepId, includeAuto = true) {
+    const opts = [];
+    if (includeAuto) opts.push(h("option", { value: "__auto__", text: "Auto (Next Step)" }));
+    opts.push(h("option", { value: "__none__", text: "None" }));
+    state.vb.steps.forEach((st, idx) => {
+      if (st.id === currentStepId) return;
+      opts.push(h("option", { value: st.id, text: `#${idx + 1} · ${getVbStepLabel(st).slice(0, 26)}` }));
+    });
+    return opts;
+  }
+
+  function renderVbSteps() {
+    el.vbStepCount.textContent = String(state.vb.steps.length);
+    el.vbStepsList.replaceChildren();
+    if (!state.vb.steps.length) {
+      el.vbStepsList.appendChild(
+        h("div", {
+          className: "vb-empty-hint",
+          text: "No steps yet. Add your Teams above, then click + Add Step to compose with dropdowns (Teams, Actions, True/False Decisions & SLAs).",
+        })
+      );
+      return;
+    }
+
+    const typeLabels = {
+      start: "Start",
+      task: "Task",
+      system: "System",
+      decision: "Decision (T/F)",
+      wait: "Wait / SLA",
+      parallel: "Parallel",
+      end_success: "End ✓",
+      end_reject: "End ✕",
+    };
+
+    state.vb.steps.forEach((step, idx) => {
+      const expanded = state.vb.expandedId === step.id;
+      const dot = h("span", { className: "team-dot" });
+      dot.style.backgroundColor = vbTeamColor(step.teamId);
+
+      const header = h(
+        "div",
+        {
+          className: "vb-step-header",
+          onClick: (e) => {
+            if (e.target.closest("button")) return;
+            state.vb.expandedId = expanded ? null : step.id;
+            renderVbSteps();
+          },
+        },
+        h(
+          "div",
+          { className: "vb-step-summary" },
+          h("span", { className: "vb-step-num tabular-nums", text: `#${idx + 1}` }),
+          dot,
+          h("span", { className: "badge badge--subtle", text: typeLabels[step.nodeType] || step.nodeType }),
+          h("span", { className: "vb-step-title-preview", text: getVbStepLabel(step) })
+        ),
+        h(
+          "div",
+          { className: "vb-step-controls" },
+          h("button", {
+            className: "btn btn-ghost btn-xs",
+            type: "button",
+            title: "Move up",
+            disabled: idx === 0,
+            text: "↑",
+            onClick: () => moveVbStep(idx, -1),
+          }),
+          h("button", {
+            className: "btn btn-ghost btn-xs",
+            type: "button",
+            title: "Move down",
+            disabled: idx === state.vb.steps.length - 1,
+            text: "↓",
+            onClick: () => moveVbStep(idx, 1),
+          }),
+          h("button", {
+            className: "btn btn-ghost btn-xs",
+            type: "button",
+            title: "Delete step",
+            text: "×",
+            onClick: () => deleteVbStep(step.id),
+          })
+        )
+      );
+
+      const cardChildren = [header];
+
+      if (expanded) {
+        // Row 1: Team + Step Type dropdowns
+        const teamSelect = h(
+          "select",
+          {
+            className: "field-control",
+            "aria-label": `Step ${idx + 1} team`,
+            onChange: (e) => {
+              step.teamId = e.target.value;
+              renderVbSteps();
+            },
+          },
+          ...state.vb.teams.map((t) => h("option", { value: t.id, text: t.name }))
+        );
+        teamSelect.value = step.teamId;
+
+        const typeSelect = h(
+          "select",
+          {
+            className: "field-control",
+            "aria-label": `Step ${idx + 1} type`,
+            onChange: (e) => {
+              step.nodeType = e.target.value;
+              if (step.nodeType === "decision" && step.actionPreset === "Review & Assess Request") {
+                step.actionPreset = "Approve Request?";
+              } else if (step.nodeType === "end_success") {
+                step.actionPreset = "Case Resolved Successfully";
+              } else if (step.nodeType === "end_reject") {
+                step.actionPreset = "Request Rejected & Archived";
+              }
+              renderVbSteps();
+            },
+          },
+          h("option", { value: "start", text: "Start Event" }),
+          h("option", { value: "task", text: "Task / Action" }),
+          h("option", { value: "system", text: "System (Automated)" }),
+          h("option", { value: "decision", text: "Decision (True / False)" }),
+          h("option", { value: "wait", text: "Wait / SLA" }),
+          h("option", { value: "parallel", text: "Parallel Split" }),
+          h("option", { value: "end_success", text: "End · Success" }),
+          h("option", { value: "end_reject", text: "End · Reject" })
+        );
+        typeSelect.value = step.nodeType;
+
+        // Row 2: Action preset dropdown + Duration dropdown
+        const actionSelect = h(
+          "select",
+          {
+            className: "field-control",
+            "aria-label": `Step ${idx + 1} action`,
+            onChange: (e) => {
+              step.actionPreset = e.target.value;
+              renderVbSteps();
+            },
+          },
+          ...VB_ACTION_GROUPS.map((grp) =>
+            h(
+              "optgroup",
+              { label: grp.label },
+              ...grp.items.map((item) => h("option", { value: item, text: item }))
+            )
+          ),
+          h("option", { value: "__custom__", text: "+ Custom Action…" })
+        );
+        actionSelect.value = step.actionPreset;
+
+        const durSelect = h(
+          "select",
+          {
+            className: "field-control",
+            "aria-label": `Step ${idx + 1} duration`,
+            onChange: (e) => {
+              step.durationMin = e.target.value;
+            },
+          },
+          ...VB_DURATION_OPTIONS.map((d) => h("option", { value: d.val, text: d.label }))
+        );
+        durSelect.value = step.durationMin;
+
+        const bodyChildren = [
+          h(
+            "div",
+            { className: "vb-grid-2" },
+            h("div", {}, h("label", { className: "sub-label", text: "Team / Swimlane" }), teamSelect),
+            h("div", {}, h("label", { className: "sub-label", text: "Step Type" }), typeSelect)
+          ),
+          h(
+            "div",
+            { className: "vb-grid-action" },
+            h("div", {}, h("label", { className: "sub-label", text: "Action" }), actionSelect),
+            h("div", {}, h("label", { className: "sub-label", text: "SLA" }), durSelect)
+          ),
+        ];
+
+        if (step.actionPreset === "__custom__") {
+          const customInput = h("input", {
+            type: "text",
+            className: "field-control",
+            maxlength: "90",
+            placeholder: "Type custom action label...",
+            value: step.customLabel,
+            onInput: (e) => {
+              step.customLabel = e.target.value;
+              const preview = e.target.closest(".vb-step-card")?.querySelector(".vb-step-title-preview");
+              if (preview) preview.textContent = getVbStepLabel(step);
+            },
+          });
+          bodyChildren.push(customInput);
+        }
+
+        // Row 3: Smart Routing based on Step Type
+        if (step.nodeType === "decision") {
+          const trueTargetSel = h(
+            "select",
+            {
+              className: "field-control",
+              "aria-label": "True branch target",
+              onChange: (e) => {
+                step.trueTargetId = e.target.value;
+              },
+            },
+            ...buildTargetOptions(step.id, true)
+          );
+          trueTargetSel.value = step.trueTargetId;
+
+          const trueLblSel = h(
+            "select",
+            {
+              className: "field-control",
+              "aria-label": "True branch label",
+              onChange: (e) => {
+                step.trueLabel = e.target.value;
+              },
+            },
+            h("option", { value: "Yes", text: "Yes" }),
+            h("option", { value: "True", text: "True" }),
+            h("option", { value: "Approved", text: "Approved" }),
+            h("option", { value: "Solved", text: "Solved" }),
+            h("option", { value: "Valid", text: "Valid" })
+          );
+          trueLblSel.value = step.trueLabel;
+
+          const falseTargetSel = h(
+            "select",
+            {
+              className: "field-control",
+              "aria-label": "False branch target",
+              onChange: (e) => {
+                step.falseTargetId = e.target.value;
+              },
+            },
+            ...buildTargetOptions(step.id, false)
+          );
+          falseTargetSel.value = step.falseTargetId;
+
+          const falseLblSel = h(
+            "select",
+            {
+              className: "field-control",
+              "aria-label": "False branch label",
+              onChange: (e) => {
+                step.falseLabel = e.target.value;
+              },
+            },
+            h("option", { value: "No", text: "No" }),
+            h("option", { value: "False", text: "False" }),
+            h("option", { value: "Rejected", text: "Rejected" }),
+            h("option", { value: "Escalate", text: "Escalate" }),
+            h("option", { value: "Rework", text: "Rework" })
+          );
+          falseLblSel.value = step.falseLabel;
+
+          bodyChildren.push(
+            h(
+              "div",
+              { className: "vb-decision-box" },
+              h(
+                "div",
+                { className: "vb-branch-row" },
+                h("span", { className: "vb-branch-badge vb-branch-badge--true", text: "TRUE →" }),
+                trueTargetSel,
+                trueLblSel
+              ),
+              h(
+                "div",
+                { className: "vb-branch-row" },
+                h("span", { className: "vb-branch-badge vb-branch-badge--false", text: "FALSE →" }),
+                falseTargetSel,
+                falseLblSel
+              )
+            )
+          );
+        } else if (step.nodeType === "parallel") {
+          const parA = h(
+            "select",
+            {
+              className: "field-control",
+              "aria-label": "Parallel track A target",
+              onChange: (e) => {
+                step.parTargetA = e.target.value;
+              },
+            },
+            ...buildTargetOptions(step.id, true)
+          );
+          parA.value = step.parTargetA;
+
+          const parB = h(
+            "select",
+            {
+              className: "field-control",
+              "aria-label": "Parallel track B target",
+              onChange: (e) => {
+                step.parTargetB = e.target.value;
+              },
+            },
+            ...buildTargetOptions(step.id, false)
+          );
+          parB.value = step.parTargetB;
+
+          bodyChildren.push(
+            h(
+              "div",
+              { className: "vb-decision-box" },
+              h(
+                "div",
+                { className: "vb-branch-row" },
+                h("span", { className: "vb-branch-badge vb-branch-badge--par", text: "TRACK A" }),
+                parA,
+                h("span", { className: "hint-text", text: "Parallel" })
+              ),
+              h(
+                "div",
+                { className: "vb-branch-row" },
+                h("span", { className: "vb-branch-badge vb-branch-badge--par", text: "TRACK B" }),
+                parB,
+                h("span", { className: "hint-text", text: "Parallel" })
+              )
+            )
+          );
+        } else if (step.nodeType === "end_success" || step.nodeType === "end_reject") {
+          bodyChildren.push(
+            h("div", {
+              className: "hint-text",
+              text: "Terminal node · Automatically aligned on the far right of its swimlane.",
+            })
+          );
+        } else {
+          const nextSel = h(
+            "select",
+            {
+              className: "field-control",
+              "aria-label": `Step ${idx + 1} next step`,
+              onChange: (e) => {
+                step.nextStepId = e.target.value;
+              },
+            },
+            ...buildTargetOptions(step.id, true)
+          );
+          nextSel.value = step.nextStepId;
+          bodyChildren.push(h("div", {}, h("label", { className: "sub-label", text: "Next Step →" }), nextSel));
+        }
+
+        cardChildren.push(h("div", { className: "vb-step-body" }, ...bodyChildren));
+      }
+
+      el.vbStepsList.appendChild(
+        h("div", { className: `vb-step-card${expanded ? " vb-step-card--expanded" : ""}` }, ...cardChildren)
+      );
+    });
+  }
+
+  function compileVisualBuilderPayload() {
+    const steps = state.vb.steps;
+    const usedTeamIds = new Set(steps.map((s) => s.teamId));
+    const lanes = state.vb.teams
+      .filter((t) => usedTeamIds.has(t.id))
+      .map((t, idx) => ({ id: t.id, name: t.name, kind: t.kind, order: idx }));
+
+    const stepIndexById = new Map(steps.map((s, idx) => [s.id, idx]));
+
+    const nodes = steps.map((s) => {
+      const dur = s.durationMin ? Number(s.durationMin) : null;
+      const isTerminalOrStart = ["start", "end_success", "end_reject", "parallel"].includes(s.nodeType);
+      return {
+        id: s.id,
+        label: getVbStepLabel(s),
+        node_type: s.nodeType,
+        lane_id: s.teamId,
+        is_automated: s.nodeType === "system",
+        duration_weight: dur && dur > 0 ? dur : isTerminalOrStart ? 0.1 : 1.5,
+        estimated_duration_min: dur !== null ? dur : isTerminalOrStart ? 0.0 : null,
+        risk_level: s.nodeType === "decision" || s.nodeType === "wait" ? "medium" : "low",
+      };
+    });
+
+    const edges = [];
+    const pushEdge = (srcId, tgtId, { label = null, isConditional = false, isParallel = false } = {}) => {
+      if (!tgtId || tgtId === "__none__" || tgtId === srcId) return;
+      if (!stepIndexById.has(tgtId)) return;
+      const isLoop = stepIndexById.get(tgtId) <= stepIndexById.get(srcId);
+      edges.push({
+        source: srcId,
+        target: tgtId,
+        label,
+        is_conditional: isConditional,
+        is_parallel: isParallel,
+        is_loop: isLoop,
+      });
+    };
+
+    steps.forEach((s, idx) => {
+      const autoNextId = steps[idx + 1]?.id || "__none__";
+      if (s.nodeType === "end_success" || s.nodeType === "end_reject") return;
+
+      if (s.nodeType === "decision") {
+        const tId = s.trueTargetId === "__auto__" ? autoNextId : s.trueTargetId;
+        const fId = s.falseTargetId === "__auto__" ? autoNextId : s.falseTargetId;
+        pushEdge(s.id, tId, { label: s.trueLabel || "Yes", isConditional: true });
+        pushEdge(s.id, fId, { label: s.falseLabel || "No", isConditional: true });
+      } else if (s.nodeType === "parallel") {
+        const aId = s.parTargetA === "__auto__" ? autoNextId : s.parTargetA;
+        const bId = s.parTargetB === "__auto__" ? autoNextId : s.parTargetB;
+        pushEdge(s.id, aId, { label: "Parallel", isParallel: true });
+        pushEdge(s.id, bId, { label: "Parallel", isParallel: true });
+      } else {
+        const nId = s.nextStepId === "__auto__" ? autoNextId : s.nextStepId;
+        pushEdge(s.id, nId);
+      }
+    });
+
+    const title = el.vbProcessTitle.value.trim() || "Visual Swimlane Workflow";
+    return {
+      title,
+      objective: `Structured BPMN workflow across ${lanes.length} team(s) and ${nodes.length} operational step(s).`,
+      direction: state.direction,
+      highlight_critical: state.highlightCritical,
+      align_ends_right: true,
+      lanes,
+      nodes,
+      edges,
+    };
+  }
+
+  async function runVisualBuilderGeneration() {
+    if (state.vb.steps.length < 2) {
+      showToast("Add at least 2 steps in Visual Builder to generate a workflow.", true);
+      return;
+    }
+    const payload = compileVisualBuilderPayload();
+    if (!payload.lanes.length) {
+      showToast("Assign at least one team to your steps.", true);
+      return;
+    }
+
+    setBusy(true, "Compiling BPMN Swimlane, NetworkX Audit & SOP…");
+    try {
+      const resp = await fetch("/api/v1/graph/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || `HTTP error ${resp.status}`);
+      if (state.activeTab === "docs") switchTab("visual");
+      await applyPipelineResult(data, { pushHistory: true, label: payload.title });
+      showToast(`Swimlane architecture compiled in ${data.meta?.elapsed_ms ?? 0} ms.`);
+    } catch (err) {
+      setStatus("error", err.message || "Failed to build workflow.");
+      showToast(err.message || "Failed to build workflow.", true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openPromptModal() {
     if (!state.systemPromptText) {
       try {
@@ -2048,13 +2818,54 @@
     el.btnOpenDocs.addEventListener("click", () => openDocsTab());
     el.btnShortcuts.addEventListener("click", () => openTopLayer(el.modalShortcuts));
 
-    el.btnEmptyFocus.addEventListener("click", () => el.processDescription.focus());
+    el.btnEmptyBuilder.addEventListener("click", () => {
+      setInputMode("builder");
+      if (!state.vb.steps.length) addVbStep();
+    });
+    el.btnEmptyFocus.addEventListener("click", () => {
+      setInputMode("narrative");
+      el.processDescription.focus();
+    });
     el.btnEmptyDocs.addEventListener("click", () => openDocsTab());
     el.btnPromptGuide.addEventListener("click", () => openDocsTab("doc-prompting"));
     el.inputEmptyImportYaml.addEventListener("change", (e) => {
       handleImportYaml(e.target.files?.[0]);
       e.target.value = "";
     });
+
+    // Mode Switcher & Visual Builder Events
+    el.modeTabNarrative.addEventListener("click", () => setInputMode("narrative"));
+    el.modeTabBuilder.addEventListener("click", () => setInputMode("builder"));
+    el.vbTeamPreset.addEventListener("change", () => {
+      const val = el.vbTeamPreset.value;
+      el.vbCustomTeamWrap.hidden = val !== "__custom__";
+      if (val !== "__custom__") {
+        el.vbTeamKind.value = inferTeamKind(val);
+      } else {
+        el.vbCustomTeamInput.focus();
+      }
+    });
+    el.vbCustomTeamInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addVbTeam();
+      }
+    });
+    el.btnVbAddTeam.addEventListener("click", () => addVbTeam());
+    el.btnVbAddStep.addEventListener("click", () => addVbStep());
+    el.btnVbReset.addEventListener("click", () => {
+      state.vb.teams = [];
+      state.vb.steps = [];
+      state.vb.expandedId = null;
+      el.vbProcessTitle.value = "";
+      renderVbTeams();
+      renderVbSteps();
+      showToast("Visual Builder cleared.");
+    });
+
+    // Renderer Toggle (BPMN Swimlane | Mermaid)
+    el.btnRenderBpmn.addEventListener("click", () => setRendererMode("bpmn"));
+    el.btnRenderMermaid.addEventListener("click", () => setRendererMode("mermaid"));
 
     document.querySelectorAll("[data-close-dialog]").forEach((btn) => {
       btn.addEventListener("click", () => closeTopLayer($(btn.dataset.closeDialog)));
@@ -2083,9 +2894,8 @@
     document.querySelectorAll('input[name="direction"]').forEach((radio) => {
       radio.addEventListener("change", (e) => {
         state.direction = e.target.value;
-        if (state.currentMermaid) {
-          validateAndApplyMermaid(state.currentMermaid, {
-            direction: state.direction,
+        if (state.currentGraph || state.currentMermaid) {
+          rebuildCurrentGraph({
             pushHistory: true,
             label: `Orientation ${state.direction}`,
           });
@@ -2095,15 +2905,15 @@
 
     el.chkCriticalPath.addEventListener("change", (e) => {
       state.highlightCritical = e.target.checked;
-      if (state.currentMermaid) {
-        validateAndApplyMermaid(state.currentMermaid, {
-          direction: state.direction,
-          pushHistory: false,
-        });
+      if (state.currentGraph || state.currentMermaid) {
+        rebuildCurrentGraph({ pushHistory: false });
       }
     });
 
-    el.btnGenerate.addEventListener("click", () => runGeneration());
+    el.btnGenerate.addEventListener("click", () => {
+      if (state.inputMode === "builder") runVisualBuilderGeneration();
+      else runGeneration();
+    });
     el.tabButtons.forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
     el.btnRepairEditor.addEventListener("click", () =>
@@ -2266,7 +3076,8 @@
 
       if (mod && e.key === "Enter") {
         e.preventDefault();
-        runGeneration();
+        if (state.inputMode === "builder") runVisualBuilderGeneration();
+        else runGeneration();
         return;
       }
       if (mod && e.key.toLowerCase() === "s") {
@@ -2300,7 +3111,8 @@
   function setBusy(busy, message = "") {
     el.btnGenerate.disabled = busy;
     el.btnGenerate.setAttribute("aria-busy", String(busy));
-    el.btnGenerateLabel.textContent = busy ? "Processing…" : "Generate Architecture";
+    const readyLabel = state.inputMode === "builder" ? "Build Swimlane (Python)" : "Generate Architecture";
+    el.btnGenerateLabel.textContent = busy ? "Processing…" : readyLabel;
     if (busy && message) setStatus("working", message);
   }
 
