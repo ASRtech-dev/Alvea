@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light dark">
   <script src="/theme-init.js"></script>
-  <title>ALVEA — Estudio de Arquitectura e Inteligencia de Procesos</title>
+  <title>ALVEA — Process Architecture &amp; Intelligence Studio</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
-  <!-- Encabezado Ejecutivo -->
+  <!-- Executive Header -->
   <header class="app-header">
     <div class="brand-section">
       <div class="brand-mark" aria-hidden="true">
@@ -27,101 +27,88 @@
           <span class="brand-name">ALVEA</span>
           <span class="badge badge--brand" id="backend-badge">Python + NetworkX</span>
         </div>
-        <p class="brand-subtitle">De la narrativa operativa a la arquitectura ejecutiva</p>
+        <p class="brand-subtitle">From operational narrative to executive architecture</p>
       </div>
     </div>
 
     <div class="header-actions">
-      <div class="btn-group" role="group" aria-label="Historial de versiones">
-        <button class="btn btn-icon btn-sm" id="btn-undo" type="button" title="Deshacer (Ctrl+Z)" disabled aria-label="Deshacer">
+      <div class="btn-group" role="group" aria-label="Version history">
+        <button class="btn btn-icon btn-sm" id="btn-undo" type="button" title="Undo (Ctrl+Z)" disabled aria-label="Undo">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
         </button>
-        <button class="btn btn-icon btn-sm" id="btn-redo" type="button" title="Rehacer (Ctrl+Shift+Z)" disabled aria-label="Rehacer">
+        <button class="btn btn-icon btn-sm" id="btn-redo" type="button" title="Redo (Ctrl+Shift+Z)" disabled aria-label="Redo">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg>
         </button>
-        <button class="btn btn-outline btn-sm" id="btn-history" type="button" title="Ver historial de versiones">
-          Historial (<span id="history-count">0</span>)
+        <button class="btn btn-outline btn-sm" id="btn-history" type="button" title="View session version history">
+          History (<span id="history-count">0</span>)
         </button>
       </div>
 
-      <button class="btn btn-outline btn-sm" id="btn-config-ai" type="button" title="Configurar claves y endpoints de IA">
+      <button class="btn btn-outline btn-sm" id="btn-config-ai" type="button" title="Configure AI provider credentials &amp; endpoints">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        Proveedores IA
+        AI Providers
       </button>
 
-      <button class="btn btn-outline btn-sm" id="btn-view-prompt" type="button" title="Inspeccionar System Prompt">
+      <button class="btn btn-outline btn-sm" id="btn-view-prompt" type="button" title="Inspect LLM System Prompt">
         Prompt
       </button>
 
-      <a class="btn btn-outline btn-sm" href="/ejemplo.html" target="_blank" rel="noopener noreferrer" title="Abrir visor standalone de ejemplo">
-        Visor Ejemplo
-      </a>
+      <button class="btn btn-outline btn-sm" id="btn-open-docs" type="button" title="Open built-in User Guide">
+        Guide
+      </button>
 
-      <button class="btn btn-icon btn-sm" id="btn-shortcuts" type="button" title="Atajos de teclado (?)" aria-label="Atajos de teclado">?</button>
+      <button class="btn btn-icon btn-sm" id="btn-shortcuts" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
 
-      <button class="btn btn-outline btn-sm theme-toggle" id="btn-theme-toggle" type="button" title="Cambiar esquema de color (Sistema / Claro / Oscuro)" aria-label="Cambiar tema">
-        <span id="theme-label">Sistema</span>
+      <button class="btn btn-outline btn-sm theme-toggle" id="btn-theme-toggle" type="button" title="Cycle color theme (System / Light / Dark)" aria-label="Change color theme">
+        <span id="theme-label">System</span>
       </button>
     </div>
   </header>
 
-  <!-- Cuerpo Principal (Layout de 2 columnas con 100dvh) -->
+  <!-- Main Workspace (Two Columns, 100dvh) -->
   <main class="app-shell">
 
-    <!-- Panel Izquierdo: Narrativa, Proveedores y Marco Cognitivo -->
-    <aside class="sidebar" aria-label="Configuración del proceso">
+    <!-- Left Sidebar: Narrative, Engine, Cognitive Framework -->
+    <aside class="sidebar" aria-label="Process configuration">
 
-      <!-- Escenarios Corporativos -->
-      <section class="panel-card">
-        <label class="field-label" for="example-select">Escenario Corporativo</label>
-        <select id="example-select" class="field-control">
-          <option value="credito">1. Crédito de Consumo Móvil (Banca Digital)</option>
-          <option value="compras">2. Licitación y Compras Estratégicas (Procurement)</option>
-          <option value="incidentes">3. Gestión de Incidentes Críticos IT (DevOps / ITIL)</option>
-          <option value="onboarding">4. Selección y Contratación de Personal (RRHH)</option>
-          <option value="viaticos">5. Rendición de Viáticos y Reembolso (Finanzas)</option>
-          <option value="custom">— Escribir proceso personalizado desde cero —</option>
-        </select>
-      </section>
-
-      <!-- Narrativa del Proceso -->
+      <!-- Workflow Narrative -->
       <section class="panel-card">
         <div class="card-header">
-          <label class="field-label" for="process-description">Narrativa del Proceso</label>
-          <button class="btn btn-ghost btn-xs" id="btn-clear-text" type="button">Limpiar</button>
+          <label class="field-label" for="process-description">Workflow Narrative</label>
+          <button class="btn btn-ghost btn-xs" id="btn-clear-text" type="button">Clear</button>
         </div>
         <textarea
           id="process-description"
           class="field-control field-textarea"
-          rows="6"
-          placeholder="Describe cualquier proceso de negocio en español o inglés: actores, validaciones, decisiones (Si... / De lo contrario...) y devoluciones..."
+          rows="8"
+          placeholder="Describe or paste your workflow using prose, numbered steps, Actor: Action, or A -&gt; B: Action. Supports If / Else if / Otherwise, In parallel:, Returns to, and durations like 30m or 2h..."
         ></textarea>
         <div class="field-meta">
-          <span id="char-counter" class="tabular-nums">0 caracteres</span>
-          <span>Ctrl + Enter para generar</span>
+          <span id="char-counter" class="tabular-nums">0 characters</span>
+          <span>Ctrl + Enter to generate</span>
         </div>
       </section>
 
-      <!-- Selector Moderno de Proveedor + Modelo + Orientación -->
+      <!-- Provider + Model + Orientation -->
       <section class="panel-card">
         <div class="card-header">
-          <span class="field-label">Motor e Inteligencia</span>
-          <span class="credential-pill" id="credential-status">Sin clave requerida</span>
+          <span class="field-label">Engine &amp; Intelligence</span>
+          <span class="credential-pill" id="credential-status">No key required</span>
         </div>
 
         <div class="form-stack">
           <div>
-            <label class="sub-label" for="provider-select">Proveedor</label>
+            <label class="sub-label" for="provider-select">Provider</label>
             <select id="provider-select" class="field-control"></select>
           </div>
 
           <div class="model-row">
             <div class="model-select-wrap">
-              <label class="sub-label" for="model-select">Modelo</label>
+              <label class="sub-label" for="model-select">Model</label>
               <select id="model-select" class="field-control"></select>
             </div>
-            <button class="btn btn-outline btn-sm" id="btn-discover-models" type="button" hidden title="Consultar modelos instalados localmente">
-              Autodescubrir
+            <button class="btn btn-outline btn-sm" id="btn-discover-models" type="button" hidden title="Probe locally installed models">
+              Auto-Discover
             </button>
           </div>
 
@@ -129,10 +116,9 @@
           <p class="provider-note" id="provider-note"></p>
         </div>
 
-        <!-- Orientación + Camino Crítico -->
         <div class="layout-controls">
-          <fieldset class="segmented-control" aria-label="Orientación del diagrama">
-            <legend class="sr-only">Orientación del diagrama</legend>
+          <fieldset class="segmented-control" aria-label="Diagram orientation">
+            <legend class="sr-only">Diagram orientation</legend>
             <label class="seg-item">
               <input type="radio" name="direction" value="LR" checked>
               <span>Horizontal (LR)</span>
@@ -145,270 +131,501 @@
 
           <label class="checkbox-inline">
             <input type="checkbox" id="chk-critical-path">
-            <span>Resaltar Camino Crítico</span>
+            <span>Highlight Critical Path</span>
           </label>
         </div>
       </section>
 
-      <!-- Acción Principal -->
+      <!-- Primary Action -->
       <button class="btn btn-primary btn-generate" id="btn-generate" type="button">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-        <span id="btn-generate-label">Generar Arquitectura</span>
+        <span id="btn-generate-label">Generate Architecture</span>
       </button>
 
-      <!-- Marco Cognitivo Dinámico (Fases A, B, C) -->
+      <!-- Dynamic Cognitive Framework (Phases A, B, C) -->
       <details class="panel-card cognitive-card" open>
         <summary class="card-header summary-toggle">
-          <span class="field-label">Marco Cognitivo BPA</span>
-          <span class="badge badge--subtle">Fases A · B · C</span>
+          <span class="field-label">BPA Cognitive Framework</span>
+          <span class="badge badge--subtle">Phases A · B · C</span>
         </summary>
 
         <div class="cognitive-body">
           <div class="cog-phase">
-            <div class="cog-title">Fase A · Actores / Carriles</div>
-            <div class="actor-chips" id="actor-chips-container"></div>
+            <div class="cog-title">Phase A · Actors / Swimlanes</div>
+            <div class="actor-chips" id="actor-chips-container">
+              <span class="cog-text">Generated after analyzing a workflow.</span>
+            </div>
           </div>
           <div class="cog-phase">
-            <div class="cog-title">Fase B · Compuertas de Decisión</div>
-            <ul class="cog-list" id="cognitive-decisions-list"></ul>
+            <div class="cog-title">Phase B · Decision &amp; Parallel Gateways</div>
+            <ul class="cog-list" id="cognitive-decisions-list">
+              <li>Awaiting workflow analysis.</li>
+            </ul>
           </div>
           <div class="cog-phase">
-            <div class="cog-title">Fase C · Rutas, Bucles y Optimización</div>
-            <p class="cog-text" id="cognitive-routes-text"></p>
+            <div class="cog-title">Phase C · Routes, Loops &amp; Optimization</div>
+            <p class="cog-text" id="cognitive-routes-text">Topologically ordered swimlane metrics appear here once generated.</p>
           </div>
         </div>
       </details>
 
     </aside>
 
-    <!-- Panel Derecho: Estudio Visual, Métricas NetworkX, Editor y Reporte -->
-    <section class="studio-viewport" aria-label="Estudio visual y diagnóstico">
+    <!-- Right Viewport: Canvas, Editor, Executive Report, YAML/JSON, In-App Docs -->
+    <section class="studio-viewport" aria-label="Visual studio and diagnostics">
 
-      <!-- Toolbar Principal -->
+      <!-- Toolbar -->
       <div class="viewport-toolbar">
-        <div class="tab-nav" role="tablist" aria-label="Vistas del estudio">
-          <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="view-visual" id="tab-visual" data-tab="visual" type="button">Diagrama</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-editor" id="tab-editor" data-tab="editor" type="button">Código Mermaid</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-report" id="tab-report" data-tab="report" type="button">Reporte Ejecutivo</button>
-          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-data" id="tab-data" data-tab="data" type="button">Modelo YAML / JSON</button>
+        <div class="tab-nav" role="tablist" aria-label="Studio views">
+          <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="view-visual" id="tab-visual" data-tab="visual" type="button">Diagram</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-editor" id="tab-editor" data-tab="editor" type="button">Mermaid Code</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-report" id="tab-report" data-tab="report" type="button">Executive Report</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-data" id="tab-data" data-tab="data" type="button">YAML / JSON</button>
+          <button class="tab-btn" role="tab" aria-selected="false" aria-controls="view-docs" id="tab-docs" data-tab="docs" type="button">Docs</button>
         </div>
 
         <div class="toolbar-actions">
-          <div class="zoom-group" role="group" aria-label="Controles de zoom">
-            <button class="zoom-btn" id="btn-zoom-out" type="button" title="Alejar (-)">−</button>
+          <div class="zoom-group" role="group" aria-label="Zoom controls">
+            <button class="zoom-btn" id="btn-zoom-out" type="button" title="Zoom out (-)" disabled>−</button>
             <span class="zoom-value tabular-nums" id="zoom-label">100%</span>
-            <button class="zoom-btn" id="btn-zoom-in" type="button" title="Acercar (+)">+</button>
-            <button class="zoom-btn" id="btn-zoom-reset" type="button" title="Tamaño real (0)">1:1</button>
-            <button class="zoom-btn" id="btn-zoom-fit" type="button" title="Ajustar a pantalla (F)">Ajustar</button>
+            <button class="zoom-btn" id="btn-zoom-in" type="button" title="Zoom in (+)" disabled>+</button>
+            <button class="zoom-btn" id="btn-zoom-reset" type="button" title="Actual size (0)" disabled>1:1</button>
+            <button class="zoom-btn" id="btn-zoom-fit" type="button" title="Fit to viewport (F)" disabled>Fit</button>
           </div>
 
-          <button class="btn btn-outline btn-sm" id="btn-copy-mermaid" type="button" title="Copiar sintaxis Mermaid">Copiar</button>
-          <button class="btn btn-outline btn-sm" id="btn-export-svg" type="button" title="Descargar SVG vectorial">SVG</button>
-          <button class="btn btn-outline btn-sm" id="btn-export-png" type="button" title="Descargar PNG HD (3x)">PNG HD</button>
-          <button class="btn btn-primary btn-sm" id="btn-export-pdf" type="button" title="Descargar Reporte Ejecutivo en PDF (ReportLab)">PDF</button>
-          <button class="btn btn-outline btn-sm" id="btn-export-yaml" type="button" title="Descargar especificación YAML">YAML</button>
-          <button class="btn btn-icon btn-sm" id="btn-fullscreen" type="button" title="Pantalla completa" aria-label="Pantalla completa">
+          <button class="btn btn-outline btn-sm" id="btn-copy-mermaid" type="button" title="Copy Mermaid syntax" disabled>Copy</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-svg" type="button" title="Download vector SVG" disabled>SVG</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-png" type="button" title="Download 3x HD PNG" disabled>PNG HD</button>
+          <button class="btn btn-primary btn-sm" id="btn-export-pdf" type="button" title="Download Executive PDF Report (ReportLab)" disabled>PDF</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-yaml" type="button" title="Download canonical YAML" disabled>YAML</button>
+          <button class="btn btn-icon btn-sm" id="btn-fullscreen" type="button" title="Fullscreen diagram" aria-label="Fullscreen" disabled>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
           </button>
         </div>
       </div>
 
-      <!-- Banda de Métricas NetworkX en Vivo -->
-      <div class="metrics-strip" id="metrics-strip" aria-label="Métricas estructurales NetworkX">
+      <!-- Live NetworkX KPI Strip -->
+      <div class="metrics-strip metrics-strip--empty" id="metrics-strip" aria-label="NetworkX structural metrics">
         <div class="kpi-grid">
           <div class="kpi-item">
-            <span class="kpi-label">Grado</span>
+            <span class="kpi-label">Grade</span>
             <span class="kpi-value kpi-grade tabular-nums" id="kpi-grade">—</span>
           </div>
           <div class="kpi-item">
-            <span class="kpi-label">Carriles</span>
+            <span class="kpi-label">Lanes</span>
             <span class="kpi-value tabular-nums" id="kpi-lanes">0</span>
           </div>
           <div class="kpi-item">
-            <span class="kpi-label">Nodos / Aristas</span>
+            <span class="kpi-label">Nodes / Edges</span>
             <span class="kpi-value tabular-nums" id="kpi-nodes">0 / 0</span>
           </div>
           <div class="kpi-item">
-            <span class="kpi-label">Complejidad</span>
+            <span class="kpi-label">Complexity</span>
             <span class="kpi-value tabular-nums" id="kpi-complexity">—</span>
           </div>
           <div class="kpi-item">
-            <span class="kpi-label">Automatización</span>
+            <span class="kpi-label">Automation</span>
             <span class="kpi-value tabular-nums" id="kpi-auto">0%</span>
           </div>
           <div class="kpi-item">
-            <span class="kpi-label">Bucles</span>
+            <span class="kpi-label">Loops</span>
             <span class="kpi-value tabular-nums" id="kpi-cycles">0</span>
           </div>
           <div class="kpi-item">
-            <span class="kpi-label">Camino Crítico</span>
-            <span class="kpi-value tabular-nums" id="kpi-critical">0 pasos</span>
+            <span class="kpi-label">Critical Path</span>
+            <span class="kpi-value tabular-nums" id="kpi-critical">—</span>
           </div>
           <div class="kpi-item kpi-item--wide">
-            <span class="kpi-label">Cuello de Botella Principal</span>
+            <span class="kpi-label">Primary Bottleneck</span>
             <span class="kpi-value kpi-truncate" id="kpi-bottleneck">—</span>
           </div>
         </div>
       </div>
 
-      <!-- Vista 1: Lienzo Interactivo -->
-      <div class="view-pane canvas-pane" id="view-visual" role="tabpanel" aria-labelledby="tab-visual">
-        <div class="diagram-viewport" id="diagram-viewport">
+      <!-- View 1: Interactive Diagram Canvas + Architectural Empty State -->
+      <div class="view-pane canvas-pane canvas-pane--empty" id="view-visual" role="tabpanel" aria-labelledby="tab-visual">
+        <div class="empty-state" id="canvas-empty-state">
+          <div class="empty-state-card">
+            <div class="empty-emblem" aria-hidden="true">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="2" y1="5" x2="22" y2="5"></line>
+                <circle cx="6" cy="5" r="1.5"></circle>
+                <line x1="2" y1="12" x2="9" y2="12"></line>
+                <polygon points="12 9 15 12 12 15 9 12"></polygon>
+                <line x1="15" y1="12" x2="22" y2="12"></line>
+                <line x1="2" y1="19" x2="22" y2="19"></line>
+                <rect x="16" y="17" width="4" height="4" rx="1"></rect>
+              </svg>
+            </div>
+            <h1 class="empty-title">Start Your Process Architecture</h1>
+            <p class="empty-lead">
+              Write or paste any operational workflow in the left panel to generate a clean Mermaid.js swimlane diagram,
+              real-time NetworkX graph audit, and executive PDF report.
+            </p>
+
+            <ol class="empty-steps">
+              <li><strong>1. Describe workflow</strong><span>Free prose, lists, <code>Actor: Action</code>, or <code>A -&gt; B: Action</code></span></li>
+              <li><strong>2. Choose engine</strong><span>Offline Python v3 (instant) or local/free cloud LLMs</span></li>
+              <li><strong>3. Audit &amp; export</strong><span>NetworkX metrics, PNG 3x HD, SVG, PDF &amp; YAML</span></li>
+            </ol>
+
+            <div class="empty-syntax-strip" aria-label="Supported workflow patterns">
+              <code>Actor: Action</code>
+              <code>A -&gt; B: Action</code>
+              <code>If / Else if / Otherwise</code>
+              <code>In parallel:</code>
+              <code>Returns to</code>
+              <code>30m · 2h</code>
+            </div>
+
+            <div class="empty-actions">
+              <button class="btn btn-primary btn-sm" id="btn-empty-focus" type="button">Write Workflow</button>
+              <button class="btn btn-outline btn-sm" id="btn-empty-docs" type="button">Open User Guide</button>
+              <label class="btn btn-outline btn-sm file-btn">
+                Import YAML
+                <input type="file" id="input-empty-import-yaml" class="sr-only" accept=".yaml,.yml">
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="diagram-viewport" id="diagram-viewport" hidden>
           <div class="diagram-sheet" id="mermaid-target"></div>
         </div>
       </div>
 
-      <!-- Vista 2: Editor Mermaid en Vivo -->
+      <!-- View 2: Live Mermaid Editor -->
       <div class="view-pane editor-pane" id="view-editor" role="tabpanel" aria-labelledby="tab-editor" hidden>
         <div class="pane-bar">
-          <span class="pane-title">Editor Mermaid.js con Validación, Sanitización y Recálculo NetworkX</span>
+          <span class="pane-title">Live Mermaid.js Editor with Anti-XSS Sanitization &amp; NetworkX Recalculation</span>
           <div class="btn-group">
-            <button class="btn btn-outline btn-sm" id="btn-repair-editor" type="button">Validar y Reparar</button>
-            <button class="btn btn-primary btn-sm" id="btn-apply-editor" type="button">Aplicar al Diagrama (Ctrl+S)</button>
+            <button class="btn btn-outline btn-sm" id="btn-repair-editor" type="button">Validate &amp; Repair</button>
+            <button class="btn btn-primary btn-sm" id="btn-apply-editor" type="button">Apply to Diagram (Ctrl+S)</button>
           </div>
         </div>
         <div class="validation-banner" id="validation-banner" hidden></div>
-        <textarea id="mermaid-code-input" class="code-editor" spellcheck="false" aria-label="Código Mermaid"></textarea>
+        <textarea id="mermaid-code-input" class="code-editor" spellcheck="false" aria-label="Mermaid source code" placeholder="graph LR&#10;    %% Generate a workflow or write Mermaid syntax directly here..."></textarea>
       </div>
 
-      <!-- Vista 3: Reporte Ejecutivo Dinámico (Construcción DOM 100% libre de XSS) -->
+      <!-- View 3: Dynamic Executive Report (100% DOM-Safe) -->
       <div class="view-pane report-pane" id="view-report" role="tabpanel" aria-labelledby="tab-report" hidden>
-        <div class="report-document" id="report-container"></div>
+        <div class="report-document" id="report-container">
+          <p class="dialog-intro">No workflow analyzed yet. Generate an architecture or import a YAML file to produce the live NetworkX Executive Report.</p>
+        </div>
       </div>
 
-      <!-- Vista 4: Modelo Estructurado YAML / JSON + Importación -->
+      <!-- View 4: Structured YAML / JSON & Import -->
       <div class="view-pane data-pane" id="view-data" role="tabpanel" aria-labelledby="tab-data" hidden>
         <div class="pane-bar">
-          <span class="pane-title">Modelo Canónico ProcessGraph + Métricas NetworkX</span>
+          <span class="pane-title">Canonical ProcessGraph &amp; NetworkX Metrics</span>
           <div class="btn-group">
-            <button class="btn btn-outline btn-sm" id="btn-download-json" type="button">Descargar JSON</button>
-            <button class="btn btn-outline btn-sm" id="btn-download-yaml-2" type="button">Descargar YAML</button>
+            <button class="btn btn-outline btn-sm" id="btn-download-json" type="button" disabled>Download JSON</button>
+            <button class="btn btn-outline btn-sm" id="btn-download-yaml-2" type="button" disabled>Download YAML</button>
             <label class="btn btn-primary btn-sm file-btn">
-              Importar YAML
+              Import YAML
               <input type="file" id="input-import-yaml" class="sr-only" accept=".yaml,.yml">
             </label>
           </div>
         </div>
-        <pre class="data-preview" id="data-preview"></pre>
+        <pre class="data-preview" id="data-preview">// Canonical ProcessGraph and NetworkX metrics will appear here after generation.</pre>
       </div>
 
-      <!-- Barra de Estado Inferior -->
+      <!-- View 5: Built-In User Documentation (100% Offline, Static Semantic HTML) -->
+      <div class="view-pane docs-pane" id="view-docs" role="tabpanel" aria-labelledby="tab-docs" hidden>
+        <div class="docs-layout">
+          <nav class="docs-toc" aria-label="Documentation sections">
+            <div class="docs-toc-title">ALVEA User Guide</div>
+            <a href="#doc-quickstart">1. Quick Start</a>
+            <a href="#doc-syntax">2. Writing Workflows</a>
+            <a href="#doc-engines">3. Engines &amp; Models</a>
+            <a href="#doc-metrics">4. NetworkX Metrics</a>
+            <a href="#doc-exports">5. Editor, Shortcuts &amp; Exports</a>
+            <a href="#doc-security">6. Security &amp; Privacy</a>
+          </nav>
+
+          <article class="docs-article">
+            <header class="docs-hero">
+              <span class="badge badge--brand">Built-In Offline Reference · v3.0</span>
+              <h1 id="docs-main-heading" tabindex="-1">How to Use ALVEA</h1>
+              <p>
+                ALVEA transforms plain-text or structured operational descriptions into executive
+                <strong>Mermaid.js Swimlane diagrams</strong>, live <strong>NetworkX graph analytics</strong>,
+                and exportable <strong>PDF / YAML / JSON</strong> deliverables.
+              </p>
+            </header>
+
+            <section class="docs-section" id="doc-quickstart">
+              <h2>1. Quick Start</h2>
+              <p>Every workflow in ALVEA flows through the same canonical pipeline:</p>
+              <ol class="docs-list">
+                <li><strong>Write or paste your workflow</strong> in the <em>Workflow Narrative</em> box on the left (English or Spanish).</li>
+                <li><strong>Pick an engine:</strong> keep the default <em>Native Python BPA Engine</em> for instant 100% offline parsing, or choose a local LLM (Ollama / LM Studio) or free cloud provider.</li>
+                <li><strong>Press <code>Ctrl + Enter</code></strong> (or click <strong>Generate Architecture</strong>). ALVEA compiles a typed <code>ProcessGraph</code>, renders the Swimlane diagram, calculates NetworkX metrics, and generates the Executive Report automatically.</li>
+                <li><strong>Refine &amp; export:</strong> switch between <strong>Horizontal (LR)</strong> and <strong>Vertical (TD)</strong>, toggle <strong>Highlight Critical Path</strong>, edit Mermaid live, or export to PNG HD, SVG, PDF, YAML, or JSON.</li>
+              </ol>
+            </section>
+
+            <section class="docs-section" id="doc-syntax">
+              <h2>2. Writing Effective Workflows (Syntax Reference)</h2>
+              <p>The Native Python Workflow Engine v3 understands four complementary input styles — and you can freely mix them:</p>
+
+              <table class="report-table">
+                <thead>
+                  <tr>
+                    <th>Pattern</th>
+                    <th>Syntax Example</th>
+                    <th>Engine Behavior</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Explicit Actor</strong></td>
+                    <td><code>Risk Team: Review income [2h]</code></td>
+                    <td>Assigns the step to the <em>Risk Team</em> swimlane with a 120 min SLA weight.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Direct Handoff</strong></td>
+                    <td><code>Customer -&gt; API Gateway: Submit form [5m]</code></td>
+                    <td>Links <em>Customer</em> directly to <em>API Gateway</em> (classified as a <code>system</code> cylinder node).</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Multi-Branch Decision</strong></td>
+                    <td><code>If amount &gt; 10000, Finance approves. Else if amount &gt; 1000, Manager approves. Otherwise, System auto-approves.</code></td>
+                    <td>Groups all 3 branches onto a single diamond gateway with labeled outgoing edges.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Parallel Fork / Join</strong></td>
+                    <td><code>In parallel:</code> followed by bulleted items (<code>- Legal: Draft contract</code> / <code>- IT: Provision access</code>) or <code>Meanwhile, ...</code></td>
+                    <td>Inserts a teal hexagon <code>Parallel Split</code>, parallel edges, and automatic <code>Sync / Join</code> convergence.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Wait / SLA States</strong></td>
+                    <td><code>Wait 24h for vendor confirmation</code></td>
+                    <td>Renders an amber <code>wait</code> flag node and surfaces SLA optimization recommendations if on the critical path.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Rework Loops</strong></td>
+                    <td><code>If invalid, returns to Requester to fix and resubmit.</code></td>
+                    <td>Draws a dotted feedback edge (<code>-. "Rework" .-&gt;</code>) and registers a cycle in NetworkX.</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <h3>Semantic Node Shapes</h3>
+              <p>ALVEA automatically classifies steps into 9 visual BPMN-inspired types:</p>
+              <ul class="docs-list">
+                <li><strong>Start / End Success / End Reject:</strong> green &amp; red rounded capsules.</li>
+                <li><strong>Task:</strong> clean neutral slate box for human/department activities.</li>
+                <li><strong>System:</strong> blue database/service cylinder for APIs, ERPs, bots, and automated checks.</li>
+                <li><strong>Subprocess:</strong> indigo double-bordered box for nested procedures (e.g. KYC, background checks).</li>
+                <li><strong>Wait:</strong> amber flag shape for delays, queues, and SLA timers.</li>
+                <li><strong>Decision:</strong> yellow diamond for conditional branching.</li>
+                <li><strong>Parallel (Fork / Join):</strong> teal hexagon for concurrent execution tracks.</li>
+              </ul>
+            </section>
+
+            <section class="docs-section" id="doc-engines">
+              <h2>3. Processing Engines &amp; Models</h2>
+              <table class="report-table">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th>Providers</th>
+                    <th>Best Used For</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>100% Offline (No API)</strong></td>
+                    <td>Native Python BPA Engine v3</td>
+                    <td>Instant (&lt;10 ms) deterministic parsing with zero internet and complete confidentiality.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Local LLMs (No Cloud)</strong></td>
+                    <td>Ollama (<code>127.0.0.1:11434</code>), LM Studio (<code>127.0.0.1:1234/v1</code>)</td>
+                    <td>Deep reasoning on messy prose locally. Click <strong>Auto-Discover</strong> to load your installed models automatically.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Free Cloud Tiers (2026)</strong></td>
+                    <td>Google Gemini, Groq, OpenRouter (<code>:free</code>), Cerebras, GitHub Models</td>
+                    <td>Complex unstructured documents using free developer API keys. Open <strong>AI Providers</strong> in the top bar to set a key.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>BYOK / Custom</strong></td>
+                    <td>Mistral AI, OpenAI, Anthropic Claude, Custom OpenAI-Compatible</td>
+                    <td>Enterprise API keys or internal HTTPS/loopback vLLM/LiteLLM gateways.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                Every LLM response passes through ALVEA's <strong>5-level self-repair pipeline</strong> (strict JSON Schema, automatic mode downgrade, <code>&lt;think&gt;</code> stripping, single self-repair pass, and Mermaid-to-Graph fallback) so downstream NetworkX analytics always work.
+              </p>
+            </section>
+
+            <section class="docs-section" id="doc-metrics">
+              <h2>4. NetworkX Graph Intelligence Metrics</h2>
+              <ul class="docs-list">
+                <li><strong>Efficiency Grade (<code>A+</code> to <code>C</code>):</strong> composite operational score combining automation coverage, inter-lane handoff friction, rework cycles, complexity, and structural anomalies.</li>
+                <li><strong>Cyclomatic Complexity (<code>M = E - N + 2P</code>):</strong> measures decision branching density (<em>Low</em> ≤ 4, <em>Moderate</em> 5–10, <em>High</em> &gt; 10).</li>
+                <li><strong>Critical Path:</strong> longest weighted path over the cycle-condensed DAG. When you include explicit step durations (e.g. <code>30m</code>, <code>2h</code>, <code>1d</code>), ALVEA computes total estimated cycle time in minutes; otherwise it uses relative operational weights.</li>
+                <li><strong>Primary Bottleneck:</strong> highest-risk node ranked by NetworkX betweenness centrality, degree, incident cross-lane handoffs, manual effort, and wait penalties.</li>
+                <li><strong>Handoffs &amp; Automation:</strong> percentage of transitions crossing swimlane boundaries and percentage of automated/system steps.</li>
+                <li><strong>Cycles &amp; Structural Anomalies:</strong> detects rework loops, orphan nodes, unreachable steps, dead ends without terminal nodes, and incomplete decisions (&lt; 2 branches).</li>
+              </ul>
+            </section>
+
+            <section class="docs-section" id="doc-exports">
+              <h2>5. Live Editor, Keyboard Shortcuts &amp; Exports</h2>
+              <p>
+                Editing syntax in the <strong>Mermaid Code</strong> tab and clicking <strong>Apply to Diagram</strong> (or <code>Ctrl + S</code>)
+                sanitizes the syntax, re-parses the diagram back into a <code>ProcessGraph</code>, and recalculates all NetworkX metrics and the Executive Report automatically.
+              </p>
+              <ul class="docs-list">
+                <li><strong>PNG HD (3x):</strong> native SVG-to-Canvas rasterization with zero <code>foreignObject</code> / tainted-canvas failures.</li>
+                <li><strong>SVG:</strong> clean standalone vector graphic with explicit dimensions and crisp background.</li>
+                <li><strong>Executive PDF:</strong> multipage ReportLab document embedding KPI cards, swimlane visual, workload table, cognitive phases, NetworkX findings, recommendations, and Mermaid appendix.</li>
+                <li><strong>YAML / JSON:</strong> full canonical process bundle supporting round-trip <strong>Import YAML</strong> to reload saved architectures later.</li>
+              </ul>
+              <div class="docs-shortcuts-grid">
+                <div><kbd>Ctrl / Cmd + Enter</kbd> Generate architecture</div>
+                <div><kbd>Ctrl / Cmd + S</kbd> Apply editor / download SVG</div>
+                <div><kbd>Ctrl / Cmd + Z</kbd> Undo version</div>
+                <div><kbd>Ctrl / Cmd + Shift + Z</kbd> Redo version</div>
+                <div><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd> / <kbd>F</kbd> Zoom &amp; fit canvas</div>
+                <div><kbd>?</kbd> Open keyboard shortcuts</div>
+              </div>
+            </section>
+
+            <section class="docs-section" id="doc-security">
+              <h2>6. Security &amp; Privacy Architecture</h2>
+              <ul class="docs-list">
+                <li><strong>Zero Server-Side Key Persistence:</strong> API keys live in browser RAM by default (optional <code>sessionStorage</code>), are sent only via HTTP headers (never in URL query strings), wrapped in <code>SecretStr</code>, and automatically redacted from logs.</li>
+                <li><strong>SSRF Protection:</strong> cloud providers are pinned to an HTTPS-only allowlist; local LLMs are restricted to loopback (<code>127.0.0.1</code> / <code>localhost</code> / <code>::1</code>) with DNS rebinding, IMDS (<code>169.254.169.254</code>), and redirect blocking.</li>
+                <li><strong>Strict XSS &amp; CSP Defense:</strong> <code>Content-Security-Policy: script-src 'self'</code>, Mermaid <code>securityLevel: "strict"</code> with <code>htmlLabels: false</code>, unconditional stripping of <code>click</code>/<code>%%{init}</code> directives, and <code>innerHTML</code>-free rendering.</li>
+                <li><strong>100% Offline Operation:</strong> bundled Mermaid.js + local Python engine + NetworkX + ReportLab run completely offline.</li>
+              </ul>
+            </section>
+          </article>
+        </div>
+      </div>
+
+      <!-- Footer Status Bar -->
       <footer class="status-bar">
         <div class="status-left" role="status" aria-live="polite">
           <span class="status-dot" id="status-dot"></span>
-          <span id="status-text">Inicializando ALVEA…</span>
+          <span id="status-text">Ready — Enter a workflow or open Guide to begin.</span>
         </div>
         <div class="status-right tabular-nums">
-          <span id="telemetry-text">Motor Nativo Python</span>
+          <span id="telemetry-text">Offline Python Engine v3</span>
         </div>
       </footer>
     </section>
   </main>
 
-  <!-- Modal 1: Configuración de Proveedores IA (Zero Persistence en servidor) -->
+  <!-- Modal 1: AI Providers & Credentials -->
   <dialog class="studio-dialog" id="modal-ai" closedby="any" aria-labelledby="modal-ai-title">
     <div class="dialog-header">
-      <h2 class="dialog-title" id="modal-ai-title">Proveedores de IA y Claves</h2>
-      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-ai" aria-label="Cerrar">&times;</button>
+      <h2 class="dialog-title" id="modal-ai-title">AI Providers &amp; Credentials</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-ai" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body">
       <p class="dialog-intro">
-        Las claves se guardan únicamente en memoria de esta pestaña por defecto (o en <code>sessionStorage</code> si lo activas).
-        Nunca se persisten en disco en el servidor ni se envían en parámetros URL.
+        API keys are kept strictly in browser memory by default (or optional <code>sessionStorage</code>).
+        They are never written to server disk and never transmitted in URL query parameters.
       </p>
 
       <div class="form-stack">
         <div>
-          <label class="sub-label" for="modal-provider-select">Proveedor a configurar</label>
+          <label class="sub-label" for="modal-provider-select">Provider to configure</label>
           <select id="modal-provider-select" class="field-control"></select>
         </div>
 
         <div id="modal-apikey-group">
           <label class="sub-label" for="modal-api-key">API Key / Token</label>
           <div class="input-inline">
-            <input type="password" id="modal-api-key" class="field-control" autocomplete="off" placeholder="Pega tu clave del proveedor...">
-            <button class="btn btn-outline btn-sm" id="btn-toggle-key" type="button">Mostrar</button>
+            <input type="password" id="modal-api-key" class="field-control" autocomplete="off" placeholder="Paste provider API key...">
+            <button class="btn btn-outline btn-sm" id="btn-toggle-key" type="button">Show</button>
           </div>
         </div>
 
         <div id="modal-baseurl-group" hidden>
-          <label class="sub-label" for="modal-base-url">URL del Endpoint (Local o HTTPS personalizado)</label>
+          <label class="sub-label" for="modal-base-url">Endpoint URL (Local loopback or custom HTTPS)</label>
           <input type="url" id="modal-base-url" class="field-control" placeholder="http://127.0.0.1:11434">
-          <p class="hint-text">Solo se permiten direcciones loopback (127.0.0.1 / localhost) o HTTPS públicos verificados contra SSRF.</p>
+          <p class="hint-text">Only local loopback addresses (127.0.0.1 / localhost) or SSRF-verified public HTTPS endpoints are allowed.</p>
         </div>
 
         <label class="checkbox-inline">
           <input type="checkbox" id="chk-session-persist">
-          <span>Mantener claves durante esta sesión del navegador (sessionStorage)</span>
+          <span>Keep keys for this browser tab session (sessionStorage)</span>
         </label>
 
         <label class="checkbox-inline">
           <input type="checkbox" id="chk-native-fallback" checked>
-          <span>Usar Motor Nativo Python automáticamente si un proveedor cloud falla por red/cuota</span>
+          <span>Automatically fall back to Native Python Engine if a cloud provider fails</span>
         </label>
       </div>
     </div>
     <div class="dialog-footer">
-      <button class="btn btn-outline btn-sm" id="btn-clear-provider-key" type="button">Borrar clave</button>
-      <button class="btn btn-primary btn-sm" id="btn-save-provider-cfg" type="button">Guardar</button>
+      <button class="btn btn-outline btn-sm" id="btn-clear-provider-key" type="button">Clear Key</button>
+      <button class="btn btn-primary btn-sm" id="btn-save-provider-cfg" type="button">Save</button>
     </div>
   </dialog>
 
-  <!-- Modal 2: Prompt del Sistema -->
+  <!-- Modal 2: System Prompt -->
   <dialog class="studio-dialog studio-dialog--wide" id="modal-prompt" closedby="any" aria-labelledby="modal-prompt-title">
     <div class="dialog-header">
-      <h2 class="dialog-title" id="modal-prompt-title">System Prompt de Arquitectura BPA</h2>
-      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-prompt" aria-label="Cerrar">&times;</button>
+      <h2 class="dialog-title" id="modal-prompt-title">BPA Architecture System Prompt</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-prompt" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body">
-      <p class="dialog-intro">Prompt estructurado utilizado por ALVEA para generar el contrato canónico <code>ProcessGraph</code> en proveedores LLM:</p>
+      <p class="dialog-intro">Structured system prompt used by ALVEA to generate the canonical <code>ProcessGraph</code> contract with LLM providers:</p>
       <pre class="code-pre" id="prompt-content"></pre>
     </div>
     <div class="dialog-footer">
-      <button class="btn btn-outline btn-sm" id="btn-copy-prompt" type="button">Copiar Prompt</button>
-      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-prompt">Cerrar</button>
+      <button class="btn btn-outline btn-sm" id="btn-copy-prompt" type="button">Copy Prompt</button>
+      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-prompt">Close</button>
     </div>
   </dialog>
 
-  <!-- Modal 3: Historial de Versiones -->
+  <!-- Modal 3: Version History -->
   <dialog class="studio-dialog" id="modal-history" closedby="any" aria-labelledby="modal-history-title">
     <div class="dialog-header">
-      <h2 class="dialog-title" id="modal-history-title">Historial de Versiones (Sesión)</h2>
-      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-history" aria-label="Cerrar">&times;</button>
+      <h2 class="dialog-title" id="modal-history-title">Version History (Session)</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-history" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body">
       <div class="history-list" id="history-list"></div>
     </div>
     <div class="dialog-footer">
-      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-history">Cerrar</button>
+      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-history">Close</button>
     </div>
   </dialog>
 
-  <!-- Modal 4: Atajos de Teclado -->
+  <!-- Modal 4: Keyboard Shortcuts -->
   <dialog class="studio-dialog" id="modal-shortcuts" closedby="any" aria-labelledby="modal-shortcuts-title">
     <div class="dialog-header">
-      <h2 class="dialog-title" id="modal-shortcuts-title">Atajos de Teclado</h2>
-      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-shortcuts" aria-label="Cerrar">&times;</button>
+      <h2 class="dialog-title" id="modal-shortcuts-title">Keyboard Shortcuts</h2>
+      <button class="btn btn-icon btn-sm" type="button" data-close-dialog="modal-shortcuts" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body">
       <ul class="shortcuts-list">
-        <li><kbd>Ctrl / Cmd + Enter</kbd><span>Generar arquitectura desde la narrativa</span></li>
-        <li><kbd>Ctrl / Cmd + S</kbd><span>Aplicar cambios del editor o descargar SVG</span></li>
-        <li><kbd>Ctrl / Cmd + Z</kbd><span>Deshacer última versión</span></li>
-        <li><kbd>Ctrl / Cmd + Shift + Z</kbd><span>Rehacer versión</span></li>
-        <li><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd> / <kbd>F</kbd><span>Acercar, alejar, 1:1 y ajustar a pantalla</span></li>
-        <li><kbd>?</kbd><span>Mostrar esta ayuda de atajos</span></li>
+        <li><kbd>Ctrl / Cmd + Enter</kbd><span>Generate workflow architecture</span></li>
+        <li><kbd>Ctrl / Cmd + S</kbd><span>Apply Mermaid editor changes or download SVG</span></li>
+        <li><kbd>Ctrl / Cmd + Z</kbd><span>Undo previous version</span></li>
+        <li><kbd>Ctrl / Cmd + Shift + Z</kbd><span>Redo version</span></li>
+        <li><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd> / <kbd>F</kbd><span>Zoom in, zoom out, 1:1, and fit to canvas</span></li>
+        <li><kbd>?</kbd><span>Show keyboard shortcuts</span></li>
       </ul>
     </div>
     <div class="dialog-footer">
-      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-shortcuts">Cerrar</button>
+      <button class="btn btn-primary btn-sm" type="button" data-close-dialog="modal-shortcuts">Close</button>
     </div>
   </dialog>
 
-  <!-- Contenedor de notificaciones accesibles -->
+  <!-- Accessible Toast Container -->
   <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Mermaid local 100% offline (sin scripts inline ni document.write) -->
+  <!-- Local Offline Mermaid.js + Application Script -->
   <script src="/vendor/mermaid.min.js" defer></script>
   <script src="/app.js" defer></script>
 </body>

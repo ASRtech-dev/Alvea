@@ -113,12 +113,25 @@ class TestSecurityPathsAndHTTPAPI(unittest.TestCase):
         finally:
             logger.removeHandler(handler)
 
+    def test_presets_and_legacy_examples_are_removed(self) -> None:
+        with httpx.Client(base_url=self.base_url) as client:
+            self.assertEqual(client.get("/api/v1/presets").status_code, 404)
+            self.assertEqual(client.get("/ejemplo.html").status_code, 404)
+            self.assertEqual(client.get("/ejemplo.js").status_code, 404)
+
     def test_generate_export_pdf_yaml_json_and_import_yaml(self) -> None:
         with httpx.Client(base_url=self.base_url) as client:
             gen = client.post(
                 "/api/v1/generate",
                 json={
-                    "text": "Cliente registra reclamo. Soporte valida el caso. Si es procedente, Finanzas reembolsa el dinero.",
+                    "text": (
+                        "Customer -> Support Desk: Submit claim [10m]\n"
+                        "In parallel:\n"
+                        "- API Gateway: Verify policy via API [2m]\n"
+                        "- Risk Analyst: Review history [1h]\n"
+                        "Wait 4h for final settlement\n"
+                        "Finance: Disburse payout [15m]"
+                    ),
                     "provider": "native_python",
                     "direction": "LR",
                 },
@@ -127,44 +140,46 @@ class TestSecurityPathsAndHTTPAPI(unittest.TestCase):
             payload = gen.json()
             mermaid = payload["mermaid"]
             self.assertIn("graph LR", mermaid)
-            self.assertGreaterEqual(payload["analytics"]["node_count"], 3)
+            self.assertGreaterEqual(payload["analytics"]["node_count"], 5)
+            self.assertGreaterEqual(payload["analytics"]["parallel_count"], 2)
 
             # Export PDF (ReportLab)
-            pdf_resp = client.post("/api/v1/export/pdf", json={"mermaid": mermaid, "title": "Prueba PDF"})
+            pdf_resp = client.post("/api/v1/export/pdf", json={"mermaid": mermaid, "title": "Executive Workflow PDF"})
             self.assertEqual(pdf_resp.status_code, 200)
             self.assertEqual(pdf_resp.headers.get("content-type"), "application/pdf")
             self.assertTrue(pdf_resp.content.startswith(b"%PDF-"))
 
             # Export YAML + Re-import YAML
-            yaml_resp = client.post("/api/v1/export/yaml", json={"mermaid": mermaid, "title": "Prueba YAML"})
+            yaml_resp = client.post("/api/v1/export/yaml", json={"mermaid": mermaid, "title": "Workflow YAML"})
             self.assertEqual(yaml_resp.status_code, 200)
             imp_resp = client.post("/api/v1/import/yaml", json={"yaml_content": yaml_resp.text})
             self.assertEqual(imp_resp.status_code, 200)
             self.assertIn("mermaid", imp_resp.json())
 
             # Export JSON
-            json_resp = client.post("/api/v1/export/json", json={"mermaid": mermaid, "title": "Prueba JSON"})
+            json_resp = client.post("/api/v1/export/json", json={"mermaid": mermaid, "title": "Workflow JSON"})
             self.assertEqual(json_resp.status_code, 200)
             self.assertIn("process_graph", json_resp.json())
 
-            # Auto-repair=False debe sanitizar XSS igualmente
+            # Auto-repair=False must still enforce anti-XSS sanitization
             xss_resp = client.post(
                 "/api/v1/mermaid/validate",
                 json={
-                    "code": 'graph LR\nA["Inicio"] --> B["Fin"]\nclick A "javascript:alert(1)"',
+                    "code": 'graph LR\nA["Start"] --> B["End"]\nclick A "javascript:alert(1)"',
                     "auto_repair": False,
                 },
             )
             self.assertEqual(xss_resp.status_code, 200)
             self.assertNotIn("click A", xss_resp.json()["mermaid"])
 
-    def test_auto_port_falls_back_when_port_is_busy(self) -> None:
-        # El puerto de cls.server ya está ocupado; auto_port debe elegir uno libre siguiente
+    def test_auto_port_falls_back_when_port_is_busy_and_respects_bounds(self) -> None:
         srv2 = create_server(host="127.0.0.1", port=self.port, auto_port=True)
         try:
             self.assertGreater(srv2.server_address[1], self.port)
         finally:
             srv2.server_close()
+        with self.assertRaises(ValueError):
+            create_server(host="127.0.0.1", port=70000, auto_port=True)
 
 
 if __name__ == "__main__":

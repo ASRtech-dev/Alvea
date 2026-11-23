@@ -1,4 +1,4 @@
-"""Servidor HTTP seguro de ALVEA (ThreadingHTTPServer + Pydantic + Seguridad Zero-Leak)."""
+"""Hardened multithreaded HTTP server for ALVEA v3.0 (English Default, Zero Presets)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ from alvea.ai.pipeline import ProcessPipeline
 from alvea.ai.prompts import SYSTEM_PROMPT_COMPACT, SYSTEM_PROMPT_FULL
 from alvea.ai.providers import ProviderCallError, discover_local_models
 from alvea.config import SETTINGS, STATIC_ROOT
-from alvea.engine.presets import PRESET_SCENARIOS
 from alvea.exporters.data_exporter import (
     export_json_bytes,
     export_yaml_bytes,
@@ -73,7 +72,7 @@ MIME_OVERRIDES = {
 
 
 class InMemoryRateLimiter:
-    """Rate limiter ligero por IP en memoria para proteger endpoints de generación."""
+    """Lightweight per-IP in-memory rate limiter for generation and PDF endpoints."""
 
     def __init__(self, max_per_min: int = 40) -> None:
         self.max_per_min = max_per_min
@@ -95,7 +94,7 @@ class InMemoryRateLimiter:
 
 class AlveaHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-    # En Windows, SO_REUSEADDR permite que dos procesos escuchen el mismo puerto simultáneamente
+    # On Windows, SO_REUSEADDR allows two processes to bind the same port simultaneously
     allow_reuse_address = sys.platform != "win32"
 
     def __init__(self, server_address: tuple[str, int], *, static_root: Path | None = None) -> None:
@@ -106,13 +105,13 @@ class AlveaHTTPServer(ThreadingHTTPServer):
 
 
 class MissingContentLengthError(ValueError):
-    """Error cuando una petición POST carece de Content-Length (HTTP 411)."""
+    """Raised when a POST request omits Content-Length (HTTP 411)."""
 
 
 class AlveaRequestHandler(BaseHTTPRequestHandler):
     server: AlveaHTTPServer  # type: ignore[assignment]
     protocol_version = "HTTP/1.1"
-    timeout = 15.0  # Anti-Slowloris: evita hilos colgados indefinidamente en HTTP/1.1 keep-alive
+    timeout = 15.0  # Anti-Slowloris socket timeout on HTTP/1.1 keep-alive
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         msg = format % args if args else format
@@ -158,18 +157,18 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
 
     def _read_json_body(self, max_bytes: int) -> dict[str, Any]:
         if self.headers.get("Transfer-Encoding"):
-            raise MissingContentLengthError("No se admite Transfer-Encoding chunked; envía Content-Length.")
+            raise MissingContentLengthError("Chunked Transfer-Encoding is not supported; send Content-Length.")
         cl_header = self.headers.get("Content-Length")
         if cl_header is None:
-            raise MissingContentLengthError("Cabecera Content-Length requerida.")
+            raise MissingContentLengthError("Content-Length header is required.")
         try:
             content_length = int(cl_header)
         except ValueError as exc:
-            raise ValueError("Cabecera Content-Length inválida.") from exc
+            raise ValueError("Invalid Content-Length header.") from exc
         if content_length < 0:
-            raise ValueError("Content-Length negativo.")
+            raise ValueError("Negative Content-Length header.")
         if content_length > max_bytes:
-            raise OverflowError(f"El payload excede el límite máximo de {max_bytes // 1024} KB.")
+            raise OverflowError(f"Payload exceeds maximum allowed size ({max_bytes // 1024} KB).")
         raw = self.rfile.read(content_length)
 
         if not raw:
@@ -177,16 +176,15 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
         try:
             parsed = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ValueError("El cuerpo de la petición no es JSON UTF-8 válido.") from exc
+            raise ValueError("Request body is not valid UTF-8 JSON.") from exc
         if not isinstance(parsed, dict):
-            raise ValueError("El cuerpo JSON debe ser un objeto.")
+            raise ValueError("JSON body must be an object.")
         return parsed
 
     # ─── GET ────────────────────────────────────────────────────────────────────
 
     def do_GET(self) -> None:  # noqa: N802
-        parsed = urlparse(self.path)
-        path = parsed.path
+        path = urlparse(self.path).path
 
         if path == "/api/v1/health":
             self._send_json(
@@ -211,21 +209,12 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/v1/providers/") and path.endswith("/models"):
             parts = path.strip("/").split("/")
-            # api / v1 / providers / <provider_id> / models
             if len(parts) == 5:
                 provider_id = parts[3]
                 custom_url = self.headers.get("X-Provider-Base-Url")
                 result = discover_local_models(provider_id, custom_base_url=custom_url)
                 self._send_json(HTTPStatus.OK, result)
                 return
-
-        if path == "/api/v1/presets":
-            presets_payload = [
-                {"id": p.id, "title": p.title, "domain": p.domain, "text": p.text}
-                for p in PRESET_SCENARIOS.values()
-            ]
-            self._send_json(HTTPStatus.OK, {"presets": presets_payload})
-            return
 
         if path == "/api/v1/prompt":
             self._send_json(
@@ -238,28 +227,19 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/"):
-            self._send_json(HTTPStatus.NOT_FOUND, {"error": "Endpoint API no encontrado."})
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "API endpoint not found."})
             return
 
-        # Servicio de archivos estáticos estrictamente confinado a STATIC_ROOT
         self._serve_static(path)
 
     def _serve_static(self, raw_path: str) -> None:
         try:
             resolved = safe_resolve_static(raw_path, static_root=self.server.static_root)
         except PermissionError:
-            self._send_bytes(
-                HTTPStatus.FORBIDDEN,
-                b"403 Acceso denegado",
-                content_type="text/plain; charset=utf-8",
-            )
+            self._send_bytes(HTTPStatus.FORBIDDEN, b"403 Access Denied", content_type="text/plain; charset=utf-8")
             return
         except FileNotFoundError:
-            self._send_bytes(
-                HTTPStatus.NOT_FOUND,
-                b"404 Recurso no encontrado",
-                content_type="text/plain; charset=utf-8",
-            )
+            self._send_bytes(HTTPStatus.NOT_FOUND, b"404 Not Found", content_type="text/plain; charset=utf-8")
             return
 
         ext = resolved.suffix.lower()
@@ -275,7 +255,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
         try:
             if path == "/api/v1/generate":
                 if not self.server.rate_limiter.allow(self.client_address[0]):
-                    self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Demasiadas solicitudes. Intenta de nuevo en unos segundos."})
+                    self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Too many requests. Please retry shortly."})
                     return
                 body = self._read_json_body(SETTINGS.max_analyze_body_bytes)
                 header_key = self.headers.get("X-API-Key")
@@ -331,20 +311,21 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
 
             if path in ("/api/v1/export/pdf", "/api/v1/export/yaml", "/api/v1/export/json"):
                 if path.endswith("/pdf") and not self.server.rate_limiter.allow(self.client_address[0]):
-                    self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Demasiadas solicitudes de exportación PDF."})
+                    self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Too many PDF export requests."})
                     return
                 limit = SETTINGS.max_body_bytes if path.endswith("/pdf") else SETTINGS.max_analyze_body_bytes
                 body = self._read_json_body(limit)
                 req = ExportRequest.model_validate(body)
                 outcome = self._resolve_export_outcome(req)
 
+                analytics_obj = self.server.pipeline.analyzer.analyze(outcome.graph)
+                report_obj = self.server.pipeline.report_builder.build(outcome.graph, analytics_obj)
+
                 if path.endswith("/pdf"):
                     pdf_bytes = export_executive_pdf(
                         graph=outcome.graph,
-                        analytics=self.server.pipeline.analyzer.analyze(outcome.graph),
-                        report=self.server.pipeline.report_builder.build(
-                            outcome.graph, self.server.pipeline.analyzer.analyze(outcome.graph)
-                        ),
+                        analytics=analytics_obj,
+                        report=report_obj,
                         mermaid_code=outcome.mermaid,
                         diagram_png_base64=req.diagram_png_base64,
                     )
@@ -353,12 +334,9 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                         pdf_bytes,
                         content_type="application/pdf",
                         is_api=True,
-                        download_filename="alvea_reporte_ejecutivo.pdf",
+                        download_filename="alvea_executive_report.pdf",
                     )
                     return
-
-                analytics_obj = self.server.pipeline.analyzer.analyze(outcome.graph)
-                report_obj = self.server.pipeline.report_builder.build(outcome.graph, analytics_obj)
 
                 if path.endswith("/yaml"):
                     yaml_bytes = export_yaml_bytes(
@@ -372,7 +350,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                         yaml_bytes,
                         content_type="application/x-yaml; charset=utf-8",
                         is_api=True,
-                        download_filename="alvea_proceso.yaml",
+                        download_filename="alvea_workflow.yaml",
                     )
                     return
 
@@ -387,7 +365,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                     json_bytes,
                     content_type="application/json; charset=utf-8",
                     is_api=True,
-                    download_filename="alvea_proceso.json",
+                    download_filename="alvea_workflow.json",
                 )
                 return
 
@@ -409,7 +387,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            self._send_json(HTTPStatus.NOT_FOUND, {"error": "Endpoint POST no encontrado."})
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "POST endpoint not found."})
 
         except MissingContentLengthError as exc:
             self.close_connection = True
@@ -418,20 +396,20 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
             self.close_connection = True
             self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": str(exc)})
         except SSRFBlockedError as exc:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"Bloqueado por política de seguridad: {exc}"})
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"Blocked by security policy: {exc}"})
         except ProviderCallError as exc:
             self._send_json(exc.status_code, {"error": redact_secrets(str(exc))})
         except ValidationError as exc:
             safe_errors = [
-                {"loc": ".".join(str(x) for x in e.get("loc", [])), "msg": e.get("msg", "Inválido")}
+                {"loc": ".".join(str(x) for x in e.get("loc", [])), "msg": e.get("msg", "Invalid")}
                 for e in exc.errors()[:5]
             ]
-            self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "Datos de entrada inválidos.", "details": safe_errors})
+            self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "Invalid input payload.", "details": safe_errors})
         except ValueError as exc:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": redact_secrets(str(exc))})
         except Exception:
-            LOGGER.exception("Error interno procesando %s", path)
-            self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Error interno del servidor."})
+            LOGGER.exception("Internal error while handling %s", path)
+            self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Internal server error."})
 
     def _resolve_export_outcome(self, req: ExportRequest):
         if req.mermaid and req.mermaid.strip():
@@ -447,7 +425,7 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
                 direction=req.direction,
                 title=req.title,
             )
-        raise ValueError("Debes proporcionar 'mermaid' o 'text' para generar la exportación.")
+        raise ValueError("Provide either 'mermaid' or 'text' to export.")
 
 
 def create_server(
@@ -459,6 +437,8 @@ def create_server(
 ) -> AlveaHTTPServer:
     bind_host = host or SETTINGS.host
     bind_port = SETTINGS.port if port is None else port
+    if bind_port < 0 or bind_port > 65535:
+        raise ValueError("Port must be between 0 and 65535.")
     if not auto_port or bind_port == 0:
         return AlveaHTTPServer((bind_host, bind_port), static_root=static_root)
 
@@ -468,7 +448,7 @@ def create_server(
             return AlveaHTTPServer((bind_host, candidate), static_root=static_root)
         except OSError as exc:
             last_err = exc
-    raise last_err or OSError(f"No se encontró un puerto libre en el rango {bind_port}-{bind_port + 10}.")
+    raise last_err or OSError(f"No free port available in range {bind_port}-{min(bind_port + 10, 65535)}.")
 
 
 def run_server(
@@ -489,10 +469,10 @@ def run_server(
     url = f"http://{browser_host}:{actual_port}"
 
     print("\n========================================================")
-    print(f"  {__app_name__} v{__version__} — Process Architecture Studio")
-    print(f"  URL Local : {url}")
-    print("  Motor     : Python + NetworkX + ReportLab + Multi-LLM")
-    print("  Pulsa Ctrl+C para detener el servidor.")
+    print(f"  {__app_name__} v{__version__} - Process Architecture Studio")
+    print(f"  Local URL : {url}")
+    print("  Engine    : Python + NetworkX + ReportLab + Multi-LLM")
+    print("  Press Ctrl+C to stop the server.")
     print("========================================================\n")
 
     if open_browser:
@@ -503,6 +483,6 @@ def run_server(
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        print("\nServidor ALVEA detenido correctamente.")
+        print("\nALVEA server stopped cleanly.")
     finally:
         srv.server_close()

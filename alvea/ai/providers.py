@@ -1,11 +1,11 @@
-"""Cliente HTTP unificado para proveedores Cloud (2026) y Locales (Ollama / LM Studio).
+"""Unified HTTP client for Cloud (2026) and Local (Ollama / LM Studio) LLM providers.
 
-Características de seguridad obligatorias:
-- Validación SSRF previa en toda petición (whitelist cloud + loopback-only local).
-- `follow_redirects=False` para impedir bypass SSRF por 301/302.
-- API keys enviadas EXCLUSIVAMENTE en cabeceras HTTP (nunca en query params).
-- Lectura en streaming estrictamente acotada (MAX_LLM_RESPONSE_BYTES) anti-OOM.
-- Errores mapeados de forma segura con redacción automática de credenciales.
+Security invariants:
+- Pre-flight SSRF validation on every request (cloud allowlist + loopback-only local).
+- `follow_redirects=False` to block 301/302 SSRF bypasses.
+- API keys sent EXCLUSIVELY in HTTP headers (never in URL query strings).
+- Bounded streaming reads (MAX_LLM_RESPONSE_BYTES) to prevent OOM.
+- Error messages redacted automatically with SecretRedactionFilter.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from alvea.security import (
 
 
 class ProviderCallError(RuntimeError):
-    """Error controlado en la comunicación con un proveedor LLM."""
+    """Controlled exception for LLM provider communication failures."""
 
     def __init__(self, message: str, *, status_code: int = 502, retryable_mode: bool = False) -> None:
         super().__init__(redact_secrets(message))
@@ -45,7 +45,7 @@ def _resolve_api_key(provider: ProviderSpec, explicit_key: str | None) -> str:
 
 
 def _read_bounded_json(response: httpx.Response) -> dict[str, Any]:
-    """Lee el cuerpo JSON acotado en memoria (soporta streaming y mocks estándar)."""
+    """Reads a bounded JSON body from a streaming response."""
     if hasattr(response, "iter_bytes") and callable(response.iter_bytes):
         chunks: list[bytes] = []
         total = 0
@@ -55,10 +55,7 @@ def _read_bounded_json(response: httpx.Response) -> dict[str, Any]:
                     continue
                 total += len(chunk)
                 if total > SETTINGS.max_llm_response_bytes:
-                    raise ProviderCallError(
-                        "La respuesta del proveedor excedió el tamaño máximo permitido.",
-                        status_code=502,
-                    )
+                    raise ProviderCallError("Provider response exceeded the maximum allowed size.", status_code=502)
                 chunks.append(chunk)
             raw = b"".join(chunks)
         except httpx.ResponseNotRead:
@@ -67,15 +64,15 @@ def _read_bounded_json(response: httpx.Response) -> dict[str, Any]:
         raw = response.content
 
     if len(raw) > SETTINGS.max_llm_response_bytes:
-        raise ProviderCallError("La respuesta del proveedor excedió el tamaño máximo permitido.", status_code=502)
+        raise ProviderCallError("Provider response exceeded the maximum allowed size.", status_code=502)
     try:
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ProviderCallError("El proveedor devolvió una respuesta no JSON inválida.", status_code=502) from exc
+        raise ProviderCallError("Provider returned an invalid non-JSON response.", status_code=502) from exc
 
 
 def _resolve_provider_url(provider: ProviderSpec, custom_base_url: str | None) -> tuple[str, str]:
-    """Devuelve (base_url_validada, ssrf_mode)."""
+    """Returns (validated_base_url, ssrf_mode)."""
     if provider.group == "local":
         base = (custom_base_url or provider.default_base_url or "").strip().rstrip("/")
         validated = validate_outbound_url(base, mode="local")
@@ -84,7 +81,7 @@ def _resolve_provider_url(provider: ProviderSpec, custom_base_url: str | None) -
     if provider.id == "custom_openai":
         base = (custom_base_url or "").strip().rstrip("/")
         if not base:
-            raise ProviderCallError("Debes indicar una URL base para el proveedor OpenAI personalizado.", status_code=400)
+            raise ProviderCallError("A base URL is required for the custom OpenAI-compatible provider.", status_code=400)
         validated = validate_outbound_url(base, mode="custom")
         return validated, "custom"
 
@@ -95,10 +92,10 @@ def _resolve_provider_url(provider: ProviderSpec, custom_base_url: str | None) -
 
 
 def discover_local_models(provider_id: str, custom_base_url: str | None = None) -> dict[str, Any]:
-    """Descubre modelos instalados en Ollama (/api/tags) o LM Studio (/v1/models)."""
+    """Discovers locally installed models on Ollama (/api/tags) or LM Studio (/v1/models)."""
     provider = get_provider(provider_id)
     if provider is None or not provider.supports_discovery:
-        return {"ok": False, "models": [], "detail": "Este proveedor no soporta autodescubrimiento local."}
+        return {"ok": False, "models": [], "detail": "This provider does not support local auto-discovery."}
 
     try:
         base_url, _ = _resolve_provider_url(provider, custom_base_url)
@@ -113,7 +110,7 @@ def discover_local_models(provider_id: str, custom_base_url: str | None = None) 
                 endpoint = f"{base_url}/api/tags"
                 with client.stream("GET", endpoint) as resp:
                     if resp.status_code != 200:
-                        return {"ok": False, "models": [], "detail": f"Ollama respondió HTTP {resp.status_code}."}
+                        return {"ok": False, "models": [], "detail": f"Ollama returned HTTP {resp.status_code}."}
                     data = _read_bounded_json(resp)
                 models = []
                 for item in data.get("models", []):
@@ -129,18 +126,18 @@ def discover_local_models(provider_id: str, custom_base_url: str | None = None) 
                         "id": name,
                         "label": f"{name} ({', '.join(meta_parts)})" if meta_parts else name,
                         "installed": True,
-                        "badges": ["Instalado", "Local"],
+                        "badges": ["Installed", "Local"],
                     })
                 return {
                     "ok": True,
                     "models": models,
-                    "detail": f"{len(models)} modelo(s) detectado(s) en Ollama.",
+                    "detail": f"{len(models)} model(s) detected in Ollama.",
                 }
 
             endpoint = f"{base_url}/models" if base_url.endswith("/v1") else f"{base_url}/v1/models"
             with client.stream("GET", endpoint) as resp:
                 if resp.status_code != 200:
-                    return {"ok": False, "models": [], "detail": f"El servidor local respondió HTTP {resp.status_code}."}
+                    return {"ok": False, "models": [], "detail": f"Local server returned HTTP {resp.status_code}."}
                 data = _read_bounded_json(resp)
             models = []
             for item in data.get("data", []):
@@ -150,23 +147,23 @@ def discover_local_models(provider_id: str, custom_base_url: str | None = None) 
                         "id": mid,
                         "label": f"{mid} (Local)",
                         "installed": True,
-                        "badges": ["Cargado", "Local"],
+                        "badges": ["Loaded", "Local"],
                     })
             return {
                 "ok": True,
                 "models": models,
-                "detail": f"{len(models)} modelo(s) detectado(s) en servidor local.",
+                "detail": f"{len(models)} model(s) detected on local server.",
             }
     except httpx.ConnectError:
         return {
             "ok": False,
             "models": [],
-            "detail": f"No se detectó ningún servicio escuchando en {base_url}. Inicia {provider.name} primero.",
+            "detail": f"No service detected listening at {base_url}. Start {provider.name} first.",
         }
     except httpx.TimeoutException:
-        return {"ok": False, "models": [], "detail": f"Tiempo de espera agotado al consultar {base_url}."}
+        return {"ok": False, "models": [], "detail": f"Timed out while probing {base_url}."}
     except Exception:
-        return {"ok": False, "models": [], "detail": "Error inesperado al consultar modelos locales."}
+        return {"ok": False, "models": [], "detail": "Unexpected error while querying local models."}
 
 
 def call_llm_provider(
@@ -181,14 +178,14 @@ def call_llm_provider(
     custom_base_url: str | None = None,
     temperature: float = 0.1,
 ) -> tuple[str, dict[str, Any]]:
-    """Ejecuta la llamada HTTP hacia el proveedor LLM seleccionado bajo políticas estrictas."""
+    """Executes an SSRF-validated HTTP call to the selected LLM provider."""
     safe_model = validate_model_id(model_id)
     base_url, ssrf_mode = _resolve_provider_url(provider, custom_base_url)
     resolved_key = _resolve_api_key(provider, api_key)
 
     if provider.requires_api_key and not resolved_key:
         raise ProviderCallError(
-            f"Falta la API Key para {provider.name}. Configúrala en 'Proveedores IA' o en la variable {provider.env_var}.",
+            f"Missing API Key for {provider.name}. Configure it in 'AI Providers' or set the {provider.env_var} environment variable.",
             status_code=401,
         )
 
@@ -230,11 +227,11 @@ def call_llm_provider(
     except ProviderCallError:
         raise
     except httpx.TimeoutException as exc:
-        raise ProviderCallError(f"Tiempo de espera agotado al contactar a {provider.name}.", status_code=504) from exc
+        raise ProviderCallError(f"Request timed out while contacting {provider.name}.", status_code=504) from exc
     except httpx.ConnectError as exc:
-        raise ProviderCallError(f"No se pudo conectar con {provider.name}. Verifica red o servicio local.", status_code=502) from exc
+        raise ProviderCallError(f"Could not connect to {provider.name}. Check your network or local server.", status_code=502) from exc
     except httpx.HTTPError as exc:
-        raise ProviderCallError(f"Error de transporte HTTP con {provider.name}.", status_code=502) from exc
+        raise ProviderCallError(f"HTTP transport error while communicating with {provider.name}.", status_code=502) from exc
 
 
 def _post_bounded_json(
@@ -245,7 +242,6 @@ def _post_bounded_json(
     payload: dict[str, Any],
     provider_name: str,
 ) -> dict[str, Any]:
-    """Ejecuta POST con lectura acotada en streaming anti-OOM."""
     with client.stream("POST", url, headers=headers, json=payload) as resp:
         _check_http_status(resp, provider_name)
         return _read_bounded_json(resp)
@@ -262,7 +258,6 @@ def _call_gemini(
     mode: StructuredMode,
     temperature: float,
 ) -> tuple[str, dict[str, Any]]:
-    # API key SIEMPRE en cabecera x-goog-api-key, NUNCA en query string
     url = f"{base_url}/v1beta/models/{model_id}:generateContent"
     gen_cfg: dict[str, Any] = {"temperature": temperature, "maxOutputTokens": 4096}
     if mode == "json_schema":
@@ -287,7 +282,7 @@ def _call_gemini(
     parts = ((candidates[0].get("content") or {}).get("parts") or []) if candidates else []
     text = "".join(str(p.get("text") or "") for p in parts if isinstance(p, dict))
     if not text.strip():
-        raise ProviderCallError("Google Gemini devolvió una respuesta vacía o filtrada.", status_code=502)
+        raise ProviderCallError("Google Gemini returned an empty or safety-filtered response.", status_code=502)
     return text, {"usage": data.get("usageMetadata") or {}}
 
 
@@ -326,7 +321,7 @@ def _call_ollama(
     content = (data.get("message") or {}).get("content")
     text = content if isinstance(content, str) else ""
     if not text.strip():
-        raise ProviderCallError("Ollama devolvió una respuesta vacía.", status_code=502)
+        raise ProviderCallError("Ollama returned an empty response.", status_code=502)
     return text, {"eval_count": data.get("eval_count")}
 
 
@@ -353,7 +348,7 @@ def _call_anthropic(
         payload["tools"] = [
             {
                 "name": "emit_process_graph",
-                "description": "Emite el objeto JSON ProcessGraph estructurado.",
+                "description": "Emit the structured ProcessGraph JSON object.",
                 "input_schema": json_schema,
             }
         ]
@@ -376,7 +371,7 @@ def _call_anthropic(
             return json.dumps(block["input"], ensure_ascii=False), {"usage": data.get("usage") or {}}
     text = "".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text")
     if not text.strip():
-        raise ProviderCallError("Anthropic devolvió una respuesta vacía.", status_code=502)
+        raise ProviderCallError("Anthropic returned an empty response.", status_code=502)
     return text, {"usage": data.get("usage") or {}}
 
 
@@ -452,22 +447,22 @@ def _call_openai_compat(
     raw_content = ((choices[0].get("message") or {}).get("content")) if choices else None
     text = raw_content if isinstance(raw_content, str) else ""
     if not text.strip():
-        raise ProviderCallError(f"{provider.name} devolvió una respuesta vacía.", status_code=502)
+        raise ProviderCallError(f"{provider.name} returned an empty response.", status_code=502)
     return text, {"usage": data.get("usage") or {}}
 
 
 def _check_http_status(resp: httpx.Response, provider_name: str) -> None:
     if 300 <= resp.status_code < 400:
-        raise ProviderCallError(f"Redirección HTTP bloqueada por política de seguridad en {provider_name}.", status_code=502)
+        raise ProviderCallError(f"HTTP redirect blocked by security policy for {provider_name}.", status_code=502)
     if resp.status_code in (401, 403):
-        raise ProviderCallError(f"Credenciales rechazadas por {provider_name} (HTTP {resp.status_code}). Verifica tu API Key.", status_code=401)
+        raise ProviderCallError(f"Credentials rejected by {provider_name} (HTTP {resp.status_code}). Check your API Key.", status_code=401)
     if resp.status_code == 429:
-        raise ProviderCallError(f"Límite de cuota o velocidad alcanzado en {provider_name} (HTTP 429).", status_code=429)
+        raise ProviderCallError(f"Rate limit or quota exceeded on {provider_name} (HTTP 429).", status_code=429)
     if resp.status_code in (400, 422):
         raise ProviderCallError(
-            f"{provider_name} rechazó el formato estructurado (HTTP {resp.status_code}).",
+            f"{provider_name} rejected the structured output format (HTTP {resp.status_code}).",
             status_code=400,
             retryable_mode=True,
         )
     if resp.status_code >= 400:
-        raise ProviderCallError(f"Error remoto en {provider_name} (HTTP {resp.status_code}).", status_code=502)
+        raise ProviderCallError(f"Remote error from {provider_name} (HTTP {resp.status_code}).", status_code=502)

@@ -1,16 +1,15 @@
 /**
- * ALVEA — Estudio de Arquitectura e Inteligencia de Procesos
- * Cliente Vanilla JS (CSP strict 'self', zero innerHTML XSS, Mermaid strict, PNG 3x HD).
+ * ALVEA v3.0 — Process Architecture & Intelligence Studio
+ * Vanilla JS client (English default, zero presets, CSP strict 'self', zero innerHTML XSS).
  */
 (() => {
   "use strict";
 
-  // ─── 1. Estado de Aplicación ───────────────────────────────────────────────
+  // ─── 1. Application State ──────────────────────────────────────────────────
   const state = {
     providers: [],
-    presets: [],
     currentProvider: "native_python",
-    currentModel: "alvea-bpa-v2",
+    currentModel: "alvea-bpa-v3",
     direction: "LR",
     highlightCritical: false,
     currentMermaid: "",
@@ -19,7 +18,7 @@
     currentReport: null,
     currentMeta: null,
     activeTab: "visual",
-    apiKeys: {},        // RAM por defecto (opcionalmente sessionStorage)
+    apiKeys: {},        // Browser RAM by default (optional sessionStorage)
     customUrls: {},
     persistSession: false,
     allowNativeFallback: true,
@@ -29,12 +28,12 @@
     isDragging: false,
     dragStartX: 0,
     dragStartY: 0,
-    history: [],        // hasta 30 snapshots
+    history: [],        // Up to 30 immutable snapshots
     historyIndex: -1,
     systemPromptText: "",
   };
 
-  // ─── 2. Referencias DOM ────────────────────────────────────────────────────
+  // ─── 2. DOM References ─────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
   const el = {
     backendBadge: $("backend-badge"),
@@ -44,11 +43,11 @@
     historyCount: $("history-count"),
     btnConfigAi: $("btn-config-ai"),
     btnViewPrompt: $("btn-view-prompt"),
+    btnOpenDocs: $("btn-open-docs"),
     btnShortcuts: $("btn-shortcuts"),
     btnThemeToggle: $("btn-theme-toggle"),
     themeLabel: $("theme-label"),
 
-    exampleSelect: $("example-select"),
     processDescription: $("process-description"),
     charCounter: $("char-counter"),
     btnClearText: $("btn-clear-text"),
@@ -71,7 +70,15 @@
     viewEditor: $("view-editor"),
     viewReport: $("view-report"),
     viewData: $("view-data"),
+    viewDocs: $("view-docs"),
+    docsMainHeading: $("docs-main-heading"),
 
+    canvasEmptyState: $("canvas-empty-state"),
+    btnEmptyFocus: $("btn-empty-focus"),
+    btnEmptyDocs: $("btn-empty-docs"),
+    inputEmptyImportYaml: $("input-empty-import-yaml"),
+
+    metricsStrip: $("metrics-strip"),
     kpiGrade: $("kpi-grade"),
     kpiLanes: $("kpi-lanes"),
     kpiNodes: $("kpi-nodes"),
@@ -132,7 +139,7 @@
     toastContainer: $("toast-container"),
   };
 
-  // ─── 3. Utilidades DOM Seguras (Zero innerHTML XSS) ────────────────────────
+  // ─── 3. XSS-Safe DOM Helpers ───────────────────────────────────────────────
   function h(tag, props = {}, ...children) {
     const node = document.createElement(tag);
     for (const [key, val] of Object.entries(props || {})) {
@@ -158,10 +165,6 @@
     return node;
   }
 
-  /**
-   * Sanitiza e inserta HTML de confianza limitada usando Sanitizer API nativa
-   * cuando está disponible, o un fallback estricto basado en nodos DOM.
-   */
   function safeSetHTML(targetEl, rawHtml) {
     const allowedElements = ["p", "b", "i", "strong", "em", "code", "ul", "li", "span"];
     if ("setHTML" in Element.prototype) {
@@ -193,17 +196,14 @@
     targetEl.replaceChildren(frag);
   }
 
-  /** Monta un SVG de Mermaid eliminando defensivamente scripts, eventos, data:text/html y foreignObject. */
   function safeMountSvg(container, svgMarkup) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgMarkup, "image/svg+xml");
     const svgEl = doc.documentElement;
     if (!svgEl || svgEl.tagName.toLowerCase() !== "svg") {
-      throw new Error("El renderizador Mermaid no devolvió un SVG válido.");
+      throw new Error("Mermaid renderer did not return a valid SVG element.");
     }
-    const blocked = svgEl.querySelectorAll("script, iframe, object, embed, foreignObject");
-    blocked.forEach((n) => n.remove());
-
+    svgEl.querySelectorAll("script, iframe, object, embed, foreignObject").forEach((n) => n.remove());
     [svgEl, ...svgEl.querySelectorAll("*")].forEach((elem) => {
       for (const attr of Array.from(elem.attributes)) {
         const name = attr.name.toLowerCase();
@@ -218,11 +218,10 @@
         }
       }
     });
-
     container.replaceChildren(document.importNode(svgEl, true));
   }
 
-  // ─── 4. Tema Claro / Oscuro / Sistema (Modern Web Guidance) ────────────────
+  // ─── 4. Theme Toggle (System / Light / Dark) ───────────────────────────────
   function getStoredScheme() {
     try {
       const val = localStorage.getItem("alvea_color_scheme");
@@ -239,34 +238,28 @@
     }
     if (persist) {
       try {
-        if (mode === "system") {
-          localStorage.removeItem("alvea_color_scheme");
-        } else {
-          localStorage.setItem("alvea_color_scheme", mode);
-        }
+        if (mode === "system") localStorage.removeItem("alvea_color_scheme");
+        else localStorage.setItem("alvea_color_scheme", mode);
       } catch (_) {
-        /* Ignorar bloqueo de almacenamiento */
+        /* Ignore storage errors */
       }
     }
-    const labels = { system: "Sistema", light: "Claro", dark: "Oscuro" };
-    el.themeLabel.textContent = labels[mode] || "Sistema";
+    const labels = { system: "System", light: "Light", dark: "Dark" };
+    el.themeLabel.textContent = labels[mode] || "System";
   }
 
   function cycleColorScheme() {
     const order = ["system", "light", "dark"];
-    const current = getStoredScheme();
-    const next = order[(order.indexOf(current) + 1) % order.length];
+    const next = order[(order.indexOf(getStoredScheme()) + 1) % order.length];
     applyColorScheme(next, true);
-    showToast(`Tema visual: ${next === "system" ? "Sistema" : next === "dark" ? "Oscuro" : "Claro"}`);
+    showToast(`Theme switched to ${next === "system" ? "System" : next === "dark" ? "Dark" : "Light"}.`);
   }
 
-  // ─── 5. Diálogos Top-Layer con Fallbacks (Modern Web Guidance) ─────────────
+  // ─── 5. Top-Layer Dialog Enhancements & Fallbacks ──────────────────────────
   let supportsDisplayTransition;
   function canTransitionDisplay() {
     if (supportsDisplayTransition !== undefined) return supportsDisplayTransition;
-    if (!window.CSS?.supports?.("transition-behavior", "allow-discrete") || !document.body) {
-      return false;
-    }
+    if (!window.CSS?.supports?.("transition-behavior", "allow-discrete") || !document.body) return false;
     const probe = document.createElement("div");
     probe.style.cssText = "transition: display 1s allow-discrete !important; display: block;";
     document.body.appendChild(probe);
@@ -284,9 +277,7 @@
   function openTopLayer(dialog) {
     if (!dialog) return;
     dialog.removeAttribute("data-closing");
-    if (!dialog.open) {
-      dialog.showModal();
-    }
+    if (!dialog.open) dialog.showModal();
   }
 
   async function closeTopLayer(dialog) {
@@ -307,7 +298,6 @@
   }
 
   function setupDialogEnhancements(dialog) {
-    // 1. Interceptar cancel (Esc / light dismiss) para animar cierre cuando falte overlay/display
     dialog.addEventListener("cancel", (event) => {
       if (!supportsTopLayerExit()) {
         event.preventDefault();
@@ -315,7 +305,6 @@
       }
     });
 
-    // 2. Fallback obligatorio para navegadores sin <dialog closedby="any">
     if (!("closedBy" in HTMLDialogElement.prototype)) {
       dialog.addEventListener("click", (event) => {
         if (event.target !== dialog) return;
@@ -325,14 +314,12 @@
           event.clientY <= rect.top + rect.height &&
           rect.left <= event.clientX &&
           event.clientX <= rect.left + rect.width;
-        if (!inside) {
-          closeTopLayer(dialog);
-        }
+        if (!inside) closeTopLayer(dialog);
       });
     }
   }
 
-  // ─── 6. Almacenamiento de Claves (RAM / sessionStorage opcional) ───────────
+  // ─── 6. Credentials (RAM / Optional sessionStorage) ────────────────────────
   function loadSessionCredentials() {
     try {
       const enabled = sessionStorage.getItem("alvea_persist_session") === "1";
@@ -360,33 +347,30 @@
         sessionStorage.removeItem("alvea_session_urls");
       }
     } catch (_) {
-      /* Ignorar */
+      /* Ignore */
     }
   }
 
-  // ─── 7. Inicialización ─────────────────────────────────────────────────────
+  // ─── 7. Initialization (Clean Empty Canvas, Zero Presets) ──────────────────
   async function init() {
     applyColorScheme(getStoredScheme(), false);
     window.addEventListener("storage", (e) => {
-      if (e.key === "alvea_color_scheme") {
-        applyColorScheme(getStoredScheme(), false);
-      }
+      if (e.key === "alvea_color_scheme") applyColorScheme(getStoredScheme(), false);
     });
 
     [el.modalAi, el.modalPrompt, el.modalHistory, el.modalShortcuts].forEach(setupDialogEnhancements);
     loadSessionCredentials();
     initMermaid();
     bindEvents();
+    setDiagramControlsEnabled(false);
 
-    await Promise.all([loadHealth(), loadProviders(), loadPresets()]);
-    if (state.presets.length > 0) {
-      await selectPreset("credito", false);
-    }
+    await Promise.all([loadHealth(), loadProviders()]);
+    setStatus("ok", "Ready — Enter a workflow or open Guide to begin.");
   }
 
   function initMermaid() {
     if (typeof window.mermaid === "undefined") {
-      setStatus("error", "No se pudo cargar vendor/mermaid.min.js.");
+      setStatus("error", "Could not load local vendor/mermaid.min.js.");
       return;
     }
     window.mermaid.initialize({
@@ -403,7 +387,30 @@
     });
   }
 
-  // ─── 8. Carga de Catálogos del Backend Python ──────────────────────────────
+  function setDiagramControlsEnabled(enabled) {
+    [
+      el.btnZoomOut,
+      el.btnZoomIn,
+      el.btnZoomReset,
+      el.btnZoomFit,
+      el.btnCopyMermaid,
+      el.btnExportSvg,
+      el.btnExportPng,
+      el.btnExportPdf,
+      el.btnExportYaml,
+      el.btnDownloadJson,
+      el.btnDownloadYaml2,
+      el.btnFullscreen,
+    ].forEach((btn) => {
+      if (btn) btn.disabled = !enabled;
+    });
+    el.canvasEmptyState.hidden = enabled;
+    el.diagramViewport.hidden = !enabled;
+    el.viewVisual.classList.toggle("canvas-pane--empty", !enabled);
+    el.metricsStrip.classList.toggle("metrics-strip--empty", !enabled);
+  }
+
+  // ─── 8. Backend Health & Provider Catalog ──────────────────────────────────
   async function loadHealth() {
     try {
       const resp = await fetch("/api/v1/health");
@@ -413,15 +420,15 @@
         return;
       }
     } catch (_) {
-      /* Fallback silencioso */
+      /* Offline fallback */
     }
-    el.backendBadge.textContent = "Backend desconectado";
+    el.backendBadge.textContent = "Backend Offline";
   }
 
   async function loadProviders() {
     try {
       const resp = await fetch("/api/v1/providers");
-      if (!resp.ok) throw new Error("No se pudo cargar el catálogo de proveedores.");
+      if (!resp.ok) throw new Error("Failed to load provider catalog.");
       const data = await resp.json();
       state.providers = data.providers || [];
       populateProviderSelects();
@@ -431,31 +438,11 @@
     }
   }
 
-  async function loadPresets() {
-    try {
-      const resp = await fetch("/api/v1/presets");
-      if (!resp.ok) return;
-      const data = await resp.json();
-      state.presets = data.presets || [];
-      el.exampleSelect.replaceChildren();
-      state.presets.forEach((p, idx) => {
-        el.exampleSelect.appendChild(
-          h("option", { value: p.id, text: `${idx + 1}. ${p.title} (${p.domain})` })
-        );
-      });
-      el.exampleSelect.appendChild(
-        h("option", { value: "custom", text: "— Escribir mi propio proceso desde cero —" })
-      );
-    } catch (_) {
-      /* Usar opciones iniciales del HTML */
-    }
-  }
-
   function populateProviderSelects() {
     const groups = [
-      { key: "local", label: "Local · Sin API Key (Privado)" },
-      { key: "free_cloud", label: "Gratuitos en la Nube (Free Tier 2026)" },
-      { key: "byok", label: "Otros Proveedores / Personalizado (BYOK)" },
+      { key: "local", label: "Local · Zero API Key (Private)" },
+      { key: "free_cloud", label: "Free Cloud Tiers (2026 Multi-Vendor)" },
+      { key: "byok", label: "Other Providers / Custom (BYOK)" },
     ];
 
     const buildSelect = (selectEl) => {
@@ -485,7 +472,6 @@
     state.currentProvider = spec.id;
     el.providerSelect.value = spec.id;
 
-    // Poblar modelos
     el.modelSelect.replaceChildren();
     (spec.models || []).forEach((m) => {
       const badgeSuffix = m.badges && m.badges.length ? ` [${m.badges.join(" · ")}]` : "";
@@ -494,17 +480,15 @@
     state.currentModel = spec.default_model || (spec.models[0] ? spec.models[0].id : "");
     el.modelSelect.value = state.currentModel;
 
-    // Botón autodescubrir para Ollama / LM Studio
     el.btnDiscoverModels.hidden = !spec.supports_discovery;
 
-    // Badges
     el.providerBadges.replaceChildren();
     (spec.badges || []).forEach((b) => {
       const low = b.toLowerCase();
       let cls = "badge badge--subtle";
-      if (low.includes("local") || low.includes("sin api") || low.includes("offline")) cls = "badge badge--local";
-      else if (low.includes("gratis") || low.includes("free")) cls = "badge badge--free";
-      else if (low.includes("rápido") || low.includes("lpu")) cls = "badge badge--fast";
+      if (low.includes("local") || low.includes("no api") || low.includes("offline")) cls = "badge badge--local";
+      else if (low.includes("free")) cls = "badge badge--free";
+      else if (low.includes("fast") || low.includes("lpu")) cls = "badge badge--fast";
       el.providerBadges.appendChild(h("span", { className: cls, text: b }));
     });
 
@@ -515,16 +499,16 @@
   function updateCredentialStatus(spec) {
     if (!spec) return;
     if (!spec.requires_api_key) {
-      el.credentialStatus.textContent = "Sin clave requerida";
+      el.credentialStatus.textContent = "No key required";
       el.credentialStatus.className = "credential-pill credential-pill--ok";
       return;
     }
     const hasKey = Boolean(state.apiKeys[spec.id]);
     if (hasKey) {
-      el.credentialStatus.textContent = "Clave lista (RAM)";
+      el.credentialStatus.textContent = "Key ready (RAM)";
       el.credentialStatus.className = "credential-pill credential-pill--ok";
     } else {
-      el.credentialStatus.textContent = "Requiere API Key";
+      el.credentialStatus.textContent = "API key required";
       el.credentialStatus.className = "credential-pill credential-pill--warn";
     }
   }
@@ -534,16 +518,14 @@
     if (!spec || !spec.supports_discovery) return;
 
     el.btnDiscoverModels.disabled = true;
-    el.btnDiscoverModels.textContent = "Buscando…";
+    el.btnDiscoverModels.textContent = "Scanning…";
     try {
       const headers = {};
-      if (state.customUrls[spec.id]) {
-        headers["X-Provider-Base-Url"] = state.customUrls[spec.id];
-      }
+      if (state.customUrls[spec.id]) headers["X-Provider-Base-Url"] = state.customUrls[spec.id];
       const resp = await fetch(`/api/v1/providers/${encodeURIComponent(spec.id)}/models`, { headers });
       const data = await resp.json();
       if (!data.ok || !data.models.length) {
-        showToast(data.detail || "No se encontraron modelos locales.", true);
+        showToast(data.detail || "No local models detected.", true);
         return;
       }
       const prevModel = el.modelSelect.value;
@@ -551,92 +533,75 @@
       data.models.forEach((m) => {
         el.modelSelect.appendChild(h("option", { value: m.id, text: m.label }));
       });
-      if (data.models.some((m) => m.id === prevModel)) {
-        el.modelSelect.value = prevModel;
-      }
+      if (data.models.some((m) => m.id === prevModel)) el.modelSelect.value = prevModel;
       state.currentModel = el.modelSelect.value;
       showToast(data.detail);
     } catch (_) {
-      showToast("Error al consultar el servicio local.", true);
+      showToast("Failed to probe local model server.", true);
     } finally {
       el.btnDiscoverModels.disabled = false;
-      el.btnDiscoverModels.textContent = "Autodescubrir";
+      el.btnDiscoverModels.textContent = "Auto-Discover";
     }
   }
 
-  // ─── 9. Generación, Validación y Renderizado ───────────────────────────────
-  async function selectPreset(presetId, notify = true) {
-    const preset = state.presets.find((p) => p.id === presetId);
-    if (!preset) return;
-    el.exampleSelect.value = presetId;
-    el.processDescription.value = preset.text;
-    updateCharCount();
-    await runGeneration({ forceProvider: "native_python", title: preset.title, notify });
-  }
-
-  async function runGeneration({ forceProvider = null, title = null, notify = true } = {}) {
+  // ─── 9. Workflow Generation, Validation & Rendering ────────────────────────
+  async function runGeneration() {
     const text = el.processDescription.value.trim();
     if (text.length < 5) {
-      showToast("Ingresa una descripción de proceso más detallada (mínimo 5 caracteres).", true);
+      showToast("Please enter a workflow description (at least 5 characters).", true);
       el.processDescription.focus();
       return;
     }
 
-    const providerId = forceProvider || state.currentProvider;
+    const providerId = state.currentProvider;
     const spec = getProviderSpec(providerId);
-    const modelId = forceProvider ? "alvea-bpa-v2" : el.modelSelect.value;
+    const modelId = el.modelSelect.value;
 
     if (spec && spec.requires_api_key && !state.apiKeys[providerId]) {
       openAiModal(providerId);
-      showToast(`Configura tu API Key para ${spec.name} (o usa un motor Local sin clave).`, true);
+      showToast(`Configure your API key for ${spec.name} (or switch to a Local engine).`, true);
       return;
     }
 
-    setBusy(true, `Analizando proceso con ${spec ? spec.name : providerId}…`);
+    setBusy(true, `Analyzing workflow with ${spec ? spec.name : providerId}…`);
     try {
       const headers = { "Content-Type": "application/json" };
-      if (state.apiKeys[providerId]) {
-        headers["X-API-Key"] = state.apiKeys[providerId];
-      }
-
-      const payload = {
-        text,
-        provider: providerId,
-        model: modelId,
-        direction: state.direction,
-        highlight_critical: state.highlightCritical,
-        title,
-        base_url: state.customUrls[providerId] || null,
-        allow_native_fallback: state.allowNativeFallback,
-      };
+      if (state.apiKeys[providerId]) headers["X-API-Key"] = state.apiKeys[providerId];
 
       const resp = await fetch("/api/v1/generate", {
         method: "POST",
         headers,
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          text,
+          provider: providerId,
+          model: modelId,
+          direction: state.direction,
+          highlight_critical: state.highlightCritical,
+          base_url: state.customUrls[providerId] || null,
+          allow_native_fallback: state.allowNativeFallback,
+        }),
       });
       const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.error || `Error HTTP ${resp.status}`);
-      }
+      if (!resp.ok) throw new Error(data.error || `HTTP error ${resp.status}`);
 
-      await applyPipelineResult(data, { pushHistory: true, label: data.graph?.title || "Generación" });
+      if (state.activeTab === "docs") switchTab("visual");
+      await applyPipelineResult(data, { pushHistory: true, label: data.graph?.title || "Generated Workflow" });
       if (data.meta?.fallback_notice) {
         showToast(data.meta.fallback_notice, true);
-      } else if (notify) {
-        showToast(`Arquitectura generada (${data.meta?.elapsed_ms ?? 0} ms).`);
+      } else {
+        showToast(`Workflow architecture generated (${data.meta?.elapsed_ms ?? 0} ms).`);
       }
     } catch (err) {
-      setStatus("error", err.message || "Error al generar diagrama.");
-      showToast(err.message || "Error al generar diagrama.", true);
+      setStatus("error", err.message || "Failed to generate workflow.");
+      showToast(err.message || "Failed to generate workflow.", true);
     } finally {
       setBusy(false);
     }
   }
 
-  async function validateAndApplyMermaid(code, { direction = null, pushHistory = true, label = "Edición manual" } = {}) {
+  async function validateAndApplyMermaid(code, { direction = null, pushHistory = true, label = "Manual edit" } = {}) {
     if (!code || !code.trim()) return;
-    setBusy(true, "Validando sintaxis Mermaid y recalculando NetworkX…");
+    setBusy(true, "Validating Mermaid syntax and recalculating NetworkX…");
     try {
       const resp = await fetch("/api/v1/mermaid/validate", {
         method: "POST",
@@ -650,12 +615,10 @@
         }),
       });
       const data = await resp.json();
-      if (!resp.ok) {
-        throw new Error(data.error || `Error HTTP ${resp.status}`);
-      }
+      if (!resp.ok) throw new Error(data.error || `HTTP error ${resp.status}`);
       await applyPipelineResult(data, { pushHistory, label });
       renderValidationBanner(data.validation);
-      showToast("Diagrama y métricas NetworkX actualizados.");
+      showToast("Diagram and NetworkX analytics updated.");
     } catch (err) {
       setStatus("error", err.message);
       showToast(err.message, true);
@@ -671,6 +634,7 @@
     state.currentReport = data.report || null;
     state.currentMeta = data.meta || null;
 
+    setDiagramControlsEnabled(Boolean(state.currentMermaid));
     el.mermaidCodeInput.value = state.currentMermaid;
     renderValidationBanner(data.validation);
     renderMetricsStrip(state.currentAnalytics);
@@ -680,20 +644,17 @@
 
     await renderMermaidSvg(state.currentMermaid);
 
-    if (pushHistory) {
-      pushSnapshot(label);
-    }
+    if (pushHistory) pushSnapshot(label);
 
     const meta = state.currentMeta || {};
     el.telemetryText.textContent = `${meta.provider_name || "ALVEA"} · ${meta.model || ""} · ${meta.elapsed_ms ?? 0} ms · graph ${state.direction}`;
-    setStatus("ok", "Arquitectura renderizada y auditada con NetworkX.");
+    setStatus("ok", "Architecture rendered and audited with NetworkX.");
   }
 
   async function renderMermaidSvg(code) {
-    if (typeof window.mermaid === "undefined") return;
+    if (typeof window.mermaid === "undefined" || !code) return;
     try {
-      // Normalizar <br> a \n para renderizado SVG limpio con htmlLabels: false
-      const normalized = String(code || "").replace(/<br\s*\/?>/gi, "\\n");
+      const normalized = String(code).replace(/<br\s*\/?>/gi, "\\n");
       const uid = "alvea_svg_" + Math.random().toString(36).slice(2, 9);
       const { svg } = await window.mermaid.render(uid, normalized);
       safeMountSvg(el.mermaidTarget, svg);
@@ -703,21 +664,21 @@
       const box = h(
         "div",
         { className: "mermaid-error-box" },
-        h("h3", { className: "mermaid-error-title", text: "Error de sintaxis Mermaid" }),
-        h("p", { className: "mermaid-error-msg", text: err.message || "Código no válido." }),
+        h("h3", { className: "mermaid-error-title", text: "Mermaid Syntax Error" }),
+        h("p", { className: "mermaid-error-msg", text: err.message || "Invalid diagram syntax." }),
         h("button", {
           className: "btn btn-outline btn-sm",
           type: "button",
-          text: "Restaurar última versión válida",
+          text: "Restore Last Valid Version",
           onClick: () => restoreLastValidSnapshot(),
         })
       );
       el.mermaidTarget.replaceChildren(box);
-      setStatus("error", "Error al renderizar Mermaid.");
+      setStatus("error", "Mermaid rendering error.");
     }
   }
 
-  // ─── 10. Renderizado de Métricas, Fases Cognitivas y Reporte (Zero XSS) ────
+  // ─── 10. Metrics, Cognitive Panel & Executive Report (Zero XSS) ────────────
   function renderValidationBanner(validation) {
     if (!validation || (!validation.warnings?.length && !validation.repairs_applied?.length)) {
       el.validationBanner.hidden = true;
@@ -726,7 +687,17 @@
     }
     const items = [...(validation.warnings || []), ...(validation.repairs_applied || [])];
     el.validationBanner.hidden = false;
-    el.validationBanner.textContent = `Auto-reparación / Validación: ${items.join(" · ")}`;
+    el.validationBanner.textContent = `Validation / Auto-Repair: ${items.join(" · ")}`;
+  }
+
+  function formatMinutes(min) {
+    if (min >= 480) return `${(min / 480).toFixed(1)}d`;
+    if (min >= 60) {
+      const hrs = Math.floor(min / 60);
+      const rem = Math.round(min % 60);
+      return rem ? `${hrs}h ${rem}m` : `${hrs}h`;
+    }
+    return `${Math.round(min)}m`;
   }
 
   function renderMetricsStrip(a) {
@@ -734,12 +705,14 @@
     el.kpiGrade.textContent = a.efficiency_grade || "—";
     el.kpiLanes.textContent = String(a.lane_count ?? 0);
     el.kpiNodes.textContent = `${a.node_count ?? 0} / ${a.edge_count ?? 0}`;
-    el.kpiComplexity.textContent = `M=${a.cyclomatic_complexity ?? 1} (${a.complexity_level || "Baja"})`;
+    el.kpiComplexity.textContent = `M=${a.cyclomatic_complexity ?? 1} (${a.complexity_level || "Low"})`;
     el.kpiAuto.textContent = `${Math.round((a.automation_ratio || 0) * 100)}%`;
     el.kpiCycles.textContent = String((a.cycles || []).length);
-    el.kpiCritical.textContent = `${(a.critical_path || []).length} pasos`;
+    const steps = (a.critical_path || []).length;
+    el.kpiCritical.textContent =
+      a.estimated_cycle_time_min != null ? `${steps} steps · ${formatMinutes(a.estimated_cycle_time_min)}` : `${steps} steps`;
     const topBn = (a.bottlenecks || [])[0];
-    el.kpiBottleneck.textContent = topBn ? `${topBn.label} (${topBn.risk_score.toFixed(2)})` : "Ninguno crítico";
+    el.kpiBottleneck.textContent = topBn ? `${topBn.label} (${topBn.risk_score.toFixed(2)})` : "None critical";
     el.kpiBottleneck.title = topBn ? `${topBn.label} — ${topBn.lane_name}` : "";
   }
 
@@ -774,11 +747,9 @@
     const bottleneckItems = (report.bottleneck_findings || []).map((f) =>
       h("li", { className: "report-card-item", text: f })
     );
-
     const reworkItems = (report.rework_findings || []).map((f) =>
       h("li", { className: "report-card-item", text: f })
     );
-
     const recItems = (report.recommendations || []).map((r) =>
       h(
         "li",
@@ -788,7 +759,11 @@
       )
     );
 
-    const cpText = (analytics.critical_path_labels || []).join(" → ") || "Sin camino crítico calculable";
+    const cpText = (analytics.critical_path_labels || []).join(" → ") || "Not computable";
+    const cpUnit =
+      analytics.estimated_cycle_time_min != null
+        ? formatMinutes(analytics.estimated_cycle_time_min)
+        : `${analytics.critical_path_weight} pts`;
 
     const docNodes = [
       h(
@@ -800,21 +775,21 @@
           h("h2", { className: "report-title", text: report.title }),
           h("p", {
             className: "provider-note",
-            text: `Diagnóstico dinámico NetworkX · ${analytics.lane_count} carriles · ${analytics.node_count} nodos · Complejidad ${analytics.complexity_level}`,
+            text: `Live NetworkX Diagnostics · ${analytics.lane_count} swimlanes · ${analytics.node_count} nodes · ${analytics.complexity_level} complexity`,
           })
         ),
-        h("div", { className: "report-grade-badge tabular-nums", text: `Grado ${report.efficiency_grade}` })
+        h("div", { className: "report-grade-badge tabular-nums", text: `Grade ${report.efficiency_grade}` })
       ),
       h(
         "section",
         { className: "report-section" },
-        h("h3", { text: "1. Diagnóstico Ejecutivo" }),
+        h("h3", { text: "1. Executive Diagnosis" }),
         h("p", { text: report.summary })
       ),
       h(
         "section",
         { className: "report-section" },
-        h("h3", { text: "2. Distribución de Carga por Carril" }),
+        h("h3", { text: "2. Workload Distribution by Swimlane" }),
         h(
           "table",
           { className: "report-table" },
@@ -824,10 +799,10 @@
             h(
               "tr",
               {},
-              h("th", { text: "Carril / Actor" }),
-              h("th", { text: "Tipo" }),
-              h("th", { text: "Nodos" }),
-              h("th", { text: "% Carga" }),
+              h("th", { text: "Swimlane / Actor" }),
+              h("th", { text: "Kind" }),
+              h("th", { text: "Nodes" }),
+              h("th", { text: "Share" }),
               h("th", { text: "Handoffs (In/Out)" })
             )
           ),
@@ -837,14 +812,14 @@
       h(
         "section",
         { className: "report-section" },
-        h("h3", { text: "3. Camino Crítico y Cuellos de Botella (NetworkX)" }),
-        h("p", { text: `Camino crítico (${analytics.critical_path.length} etapas · peso ${analytics.critical_path_weight}): ${cpText}` }),
+        h("h3", { text: "3. Critical Path & Bottlenecks (NetworkX)" }),
+        h("p", { text: `Critical Path (${analytics.critical_path.length} steps · ${cpUnit}): ${cpText}` }),
         h("ul", { className: "report-list" }, ...bottleneckItems, ...reworkItems)
       ),
       h(
         "section",
         { className: "report-section" },
-        h("h3", { text: "4. Plan de Recomendaciones Accionables" }),
+        h("h3", { text: "4. Actionable Recommendations" }),
         h("ul", { className: "report-list" }, ...recItems)
       ),
     ];
@@ -854,7 +829,7 @@
         h(
           "section",
           { className: "report-section" },
-          h("h3", { text: "5. Anomalías Estructurales Detectadas" }),
+          h("h3", { text: "5. Structural Anomalies Detected" }),
           h(
             "ul",
             { className: "report-list" },
@@ -871,18 +846,17 @@
 
   function renderDataPreview() {
     if (!state.currentGraph) {
-      el.dataPreview.textContent = "";
+      el.dataPreview.textContent = "// Canonical ProcessGraph and NetworkX metrics will appear here after generation.";
       return;
     }
-    const bundle = {
-      schema_version: "2.0",
-      process_graph: state.currentGraph,
-      analytics: state.currentAnalytics,
-    };
-    el.dataPreview.textContent = JSON.stringify(bundle, null, 2);
+    el.dataPreview.textContent = JSON.stringify(
+      { schema_version: "3.0", process_graph: state.currentGraph, analytics: state.currentAnalytics },
+      null,
+      2
+    );
   }
 
-  // ─── 11. Historial de Versiones (Undo / Redo) ──────────────────────────────
+  // ─── 11. Session Version History (Undo / Redo) ─────────────────────────────
   function pushSnapshot(label) {
     const snap = {
       id: Date.now().toString(36),
@@ -921,7 +895,7 @@
     updateCharCount();
     await applyPipelineResult(snap, { pushHistory: false });
     updateHistoryButtons();
-    showToast(`Versión restaurada: ${snap.label} (${snap.time})`);
+    showToast(`Restored snapshot: ${snap.label} (${snap.time}).`);
   }
 
   function restoreLastValidSnapshot() {
@@ -933,7 +907,7 @@
   function openHistoryModal() {
     el.historyList.replaceChildren();
     if (!state.history.length) {
-      el.historyList.appendChild(h("p", { className: "dialog-intro", text: "Aún no hay versiones registradas." }));
+      el.historyList.appendChild(h("p", { className: "dialog-intro", text: "No versions recorded in this session yet." }));
     } else {
       [...state.history].reverse().forEach((snap, revIdx) => {
         const idx = state.history.length - 1 - revIdx;
@@ -945,17 +919,17 @@
             h(
               "div",
               {},
-              h("strong", { text: `${snap.label}${isCurrent ? " (Actual)" : ""}` }),
+              h("strong", { text: `${snap.label}${isCurrent ? " (Current)" : ""}` }),
               h("div", {
                 className: "hint-text",
-                text: `${snap.time} · graph ${snap.direction} · ${snap.analytics?.node_count ?? 0} nodos`,
+                text: `${snap.time} · graph ${snap.direction} · ${snap.analytics?.node_count ?? 0} nodes`,
               })
             ),
             h("button", {
               className: "btn btn-outline btn-xs",
               type: "button",
               disabled: isCurrent,
-              text: "Restaurar",
+              text: "Restore",
               onClick: () => {
                 restoreSnapshot(idx);
                 closeTopLayer(el.modalHistory);
@@ -968,7 +942,7 @@
     openTopLayer(el.modalHistory);
   }
 
-  // ─── 12. Exportación Infalible (SVG, PNG 3x HD sin Tainted Canvas, PDF, YAML, JSON) ───
+  // ─── 12. Reliable Exports (SVG, PNG 3x HD, PDF, YAML, JSON) ────────────────
   function buildCleanSvg(svgEl) {
     const clone = svgEl.cloneNode(true);
     clone.querySelectorAll("foreignObject, script").forEach((n) => n.remove());
@@ -1012,17 +986,14 @@
   function utf8ToBase64(str) {
     const bytes = new TextEncoder().encode(str);
     let binary = "";
-    for (let i = 0; i < bytes.length; i += 1) {
-      binary += String.fromCharCode(bytes[i]);
-    }
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
     return btoa(binary);
   }
 
   function renderSvgToPngBlob(svgEl, desiredScale = 3) {
     return new Promise((resolve, reject) => {
       const { svgString, width, height } = buildCleanSvg(svgEl);
-      const maxDim = 8192;
-      const scale = Math.min(desiredScale, maxDim / Math.max(width, height, 1));
+      const scale = Math.min(desiredScale, 8192 / Math.max(width, height, 1));
       const dataUrl = `data:image/svg+xml;base64,${utf8ToBase64(svgString)}`;
 
       const img = new Image();
@@ -1035,11 +1006,11 @@
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob((blob) => {
-          if (!blob) reject(new Error("No se pudo generar el archivo PNG."));
+          if (!blob) reject(new Error("Failed to encode PNG image."));
           else resolve(blob);
         }, "image/png");
       };
-      img.onerror = () => reject(new Error("Error al rasterizar el SVG a PNG."));
+      img.onerror = () => reject(new Error("Failed to rasterize SVG to PNG."));
       img.src = dataUrl;
     });
   }
@@ -1057,34 +1028,34 @@
 
   function exportAsSvg() {
     const svg = el.mermaidTarget.querySelector("svg");
-    if (!svg) return showToast("No hay diagrama disponible.", true);
+    if (!svg) return showToast("Generate a diagram before exporting.", true);
     const { svgString } = buildCleanSvg(svg);
-    downloadBlob(new Blob([svgString], { type: "image/svg+xml;charset=utf-8" }), "alvea_arquitectura.svg");
-    showToast("SVG vectorial descargado.");
+    downloadBlob(new Blob([svgString], { type: "image/svg+xml;charset=utf-8" }), "alvea_workflow.svg");
+    showToast("Vector SVG downloaded.");
   }
 
   async function exportAsPng() {
     const svg = el.mermaidTarget.querySelector("svg");
-    if (!svg) return showToast("No hay diagrama disponible.", true);
+    if (!svg) return showToast("Generate a diagram before exporting.", true);
     try {
       const blob = await renderSvgToPngBlob(svg, 3);
-      downloadBlob(blob, "alvea_arquitectura_hd.png");
-      showToast("PNG en alta definición (3x) descargado.");
+      downloadBlob(blob, "alvea_workflow_hd.png");
+      showToast("3x HD PNG downloaded.");
     } catch (err) {
       showToast(err.message, true);
     }
   }
 
   async function exportAsPdf() {
-    if (!state.currentMermaid) return showToast("No hay diagrama para exportar.", true);
-    setBusy(true, "Generando Reporte Ejecutivo PDF con ReportLab…");
+    if (!state.currentMermaid) return showToast("Generate a workflow before exporting PDF.", true);
+    setBusy(true, "Generating Executive PDF Report with ReportLab…");
     try {
       let pngBase64 = null;
       const svg = el.mermaidTarget.querySelector("svg");
       if (svg) {
         try {
-          const blob = await renderSvgToPngBlob(svg, 1.5);
-          if (blob.size < 160_000) {
+          const blob = await renderSvgToPngBlob(svg, 2);
+          if (blob.size < 1_600_000) {
             pngBase64 = await new Promise((res) => {
               const reader = new FileReader();
               reader.onloadend = () => res(reader.result);
@@ -1092,7 +1063,7 @@
             });
           }
         } catch (_) {
-          pngBase64 = null; // ReportLab generará el esquema vectorial nativo
+          pngBase64 = null;
         }
       }
 
@@ -1100,7 +1071,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: state.currentGraph?.title || "Reporte Ejecutivo",
+          title: state.currentGraph?.title || "Executive Report",
           mermaid: state.currentMermaid,
           direction: state.direction,
           diagram_png_base64: pngBase64,
@@ -1108,11 +1079,10 @@
       });
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error || `Error al generar PDF (${resp.status})`);
+        throw new Error(errData.error || `PDF export failed (${resp.status})`);
       }
-      const pdfBlob = await resp.blob();
-      downloadBlob(pdfBlob, "alvea_reporte_ejecutivo.pdf");
-      showToast("Reporte Ejecutivo PDF descargado.");
+      downloadBlob(await resp.blob(), "alvea_executive_report.pdf");
+      showToast("Executive PDF report downloaded.");
     } catch (err) {
       showToast(err.message, true);
     } finally {
@@ -1121,21 +1091,20 @@
   }
 
   async function exportStructured(format) {
-    if (!state.currentMermaid) return showToast("No hay proceso para exportar.", true);
+    if (!state.currentMermaid) return showToast("Generate a workflow before exporting.", true);
     try {
       const resp = await fetch(`/api/v1/export/${format}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: state.currentGraph?.title || "Proceso",
+          title: state.currentGraph?.title || "Workflow",
           mermaid: state.currentMermaid,
           direction: state.direction,
         }),
       });
-      if (!resp.ok) throw new Error(`No se pudo exportar en formato ${format.toUpperCase()}.`);
-      const blob = await resp.blob();
-      downloadBlob(blob, `alvea_proceso.${format}`);
-      showToast(`Archivo ${format.toUpperCase()} descargado.`);
+      if (!resp.ok) throw new Error(`Failed to export ${format.toUpperCase()}.`);
+      downloadBlob(await resp.blob(), `alvea_workflow.${format}`);
+      showToast(`${format.toUpperCase()} file downloaded.`);
     } catch (err) {
       showToast(err.message, true);
     }
@@ -1151,25 +1120,30 @@
         body: JSON.stringify({ yaml_content: yamlContent }),
       });
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || "Error al importar YAML.");
+      if (!resp.ok) throw new Error(data.error || "Failed to import YAML.");
       await applyPipelineResult(
-        { ...data, validation: { is_valid: true, warnings: [], repairs_applied: [] }, meta: { provider_name: "Importación YAML", model: "PyYAML", elapsed_ms: 0 } },
+        {
+          ...data,
+          validation: { is_valid: true, warnings: [], repairs_applied: [] },
+          meta: { provider_name: "YAML Import", model: "PyYAML", elapsed_ms: 0 },
+        },
         { pushHistory: true, label: `YAML: ${data.graph?.title || file.name}` }
       );
       switchTab("visual");
-      showToast(`Proceso importado desde ${file.name}.`);
+      showToast(`Imported workflow from ${file.name}.`);
     } catch (err) {
       showToast(err.message, true);
     }
   }
 
-  // ─── 13. Pan, Zoom, Pestañas y Modales ─────────────────────────────────────
+  // ─── 13. Pan, Zoom, Tabs & Modals ──────────────────────────────────────────
   function applyTransform() {
     el.diagramViewport.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
     el.zoomLabel.textContent = `${Math.round(state.zoom * 100)}%`;
   }
 
   function adjustZoom(delta) {
+    if (!state.currentMermaid) return;
     state.zoom = Math.max(0.25, Math.min(3.5, Number((state.zoom + delta).toFixed(2))));
     applyTransform();
   }
@@ -1206,6 +1180,12 @@
     el.viewEditor.hidden = tabName !== "editor";
     el.viewReport.hidden = tabName !== "report";
     el.viewData.hidden = tabName !== "data";
+    el.viewDocs.hidden = tabName !== "docs";
+  }
+
+  function openDocsTab() {
+    switchTab("docs");
+    if (el.docsMainHeading) el.docsMainHeading.focus();
   }
 
   function syncDirectionRadios() {
@@ -1229,7 +1209,7 @@
     el.modalApiKeyGroup.hidden = !spec.requires_api_key && spec.id !== "custom_openai";
     el.modalApiKey.value = state.apiKeys[pid] || "";
     el.modalApiKey.type = "password";
-    el.btnToggleKey.textContent = "Mostrar";
+    el.btnToggleKey.textContent = "Show";
 
     el.modalBaseUrlGroup.hidden = !spec.allow_custom_url;
     el.modalBaseUrl.value = state.customUrls[pid] || spec.default_base_url || "";
@@ -1244,14 +1224,14 @@
           state.systemPromptText = data.system_prompt_full || "";
         }
       } catch (_) {
-        state.systemPromptText = "No se pudo consultar el prompt del servidor.";
+        state.systemPromptText = "Could not load system prompt from backend.";
       }
     }
     el.promptContent.textContent = state.systemPromptText;
     openTopLayer(el.modalPrompt);
   }
 
-  // ─── 14. Eventos y Atajos de Teclado ───────────────────────────────────────
+  // ─── 14. Events & Global Keyboard Shortcuts ────────────────────────────────
   function bindEvents() {
     el.btnThemeToggle.addEventListener("click", cycleColorScheme);
     el.btnUndo.addEventListener("click", () => state.historyIndex > 0 && restoreSnapshot(state.historyIndex - 1));
@@ -1259,27 +1239,21 @@
     el.btnHistory.addEventListener("click", openHistoryModal);
     el.btnConfigAi.addEventListener("click", () => openAiModal());
     el.btnViewPrompt.addEventListener("click", openPromptModal);
+    el.btnOpenDocs.addEventListener("click", openDocsTab);
     el.btnShortcuts.addEventListener("click", () => openTopLayer(el.modalShortcuts));
+
+    el.btnEmptyFocus.addEventListener("click", () => el.processDescription.focus());
+    el.btnEmptyDocs.addEventListener("click", openDocsTab);
+    el.inputEmptyImportYaml.addEventListener("change", (e) => {
+      handleImportYaml(e.target.files?.[0]);
+      e.target.value = "";
+    });
 
     document.querySelectorAll("[data-close-dialog]").forEach((btn) => {
       btn.addEventListener("click", () => closeTopLayer($(btn.dataset.closeDialog)));
     });
 
-    el.exampleSelect.addEventListener("change", (e) => {
-      if (e.target.value === "custom") {
-        el.processDescription.value = "";
-        updateCharCount();
-        el.processDescription.focus();
-      } else {
-        selectPreset(e.target.value, true);
-      }
-    });
-
-    el.processDescription.addEventListener("input", () => {
-      updateCharCount();
-      const matched = state.presets.find((p) => p.text.trim() === el.processDescription.value.trim());
-      el.exampleSelect.value = matched ? matched.id : "custom";
-    });
+    el.processDescription.addEventListener("input", updateCharCount);
     el.btnClearText.addEventListener("click", () => {
       el.processDescription.value = "";
       updateCharCount();
@@ -1299,7 +1273,7 @@
           validateAndApplyMermaid(state.currentMermaid, {
             direction: state.direction,
             pushHistory: true,
-            label: `Orientación ${state.direction}`,
+            label: `Orientation ${state.direction}`,
           });
         }
       });
@@ -1316,27 +1290,27 @@
     });
 
     el.btnGenerate.addEventListener("click", () => runGeneration());
-
     el.tabButtons.forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
     el.btnRepairEditor.addEventListener("click", () =>
-      validateAndApplyMermaid(el.mermaidCodeInput.value, { pushHistory: true, label: "Reparación Mermaid" })
+      validateAndApplyMermaid(el.mermaidCodeInput.value, { pushHistory: true, label: "Mermaid Repair" })
     );
     el.btnApplyEditor.addEventListener("click", () =>
-      validateAndApplyMermaid(el.mermaidCodeInput.value, { pushHistory: true, label: "Edición Mermaid" })
+      validateAndApplyMermaid(el.mermaidCodeInput.value, { pushHistory: true, label: "Mermaid Edit" })
     );
 
-    // Pan & Zoom
+    // Pan & Zoom (only when a diagram is rendered)
     el.viewVisual.addEventListener(
       "wheel",
       (e) => {
+        if (!state.currentMermaid) return;
         e.preventDefault();
         adjustZoom(e.deltaY < 0 ? 0.12 : -0.12);
       },
       { passive: false }
     );
     el.viewVisual.addEventListener("mousedown", (e) => {
-      if (e.button !== 0) return;
+      if (!state.currentMermaid || e.button !== 0) return;
       state.isDragging = true;
       state.dragStartX = e.clientX - state.panX;
       state.dragStartY = e.clientY - state.panY;
@@ -1360,12 +1334,12 @@
     el.btnZoomReset.addEventListener("click", resetZoom);
     el.btnZoomFit.addEventListener("click", fitZoom);
 
-    // Exportación
+    // Exports
     el.btnCopyMermaid.addEventListener("click", () => {
       navigator.clipboard
         .writeText(state.currentMermaid)
-        .then(() => showToast("Código Mermaid copiado al portapapeles."))
-        .catch(() => showToast("No se pudo copiar al portapapeles.", true));
+        .then(() => showToast("Mermaid code copied to clipboard."))
+        .catch(() => showToast("Failed to copy to clipboard.", true));
     });
     el.btnExportSvg.addEventListener("click", exportAsSvg);
     el.btnExportPng.addEventListener("click", exportAsPng);
@@ -1386,12 +1360,12 @@
       }
     });
 
-    // Modal IA
+    // AI Modal
     el.modalProviderSelect.addEventListener("change", (e) => refreshAiModalFields(e.target.value));
     el.btnToggleKey.addEventListener("click", () => {
       const hidden = el.modalApiKey.type === "password";
       el.modalApiKey.type = hidden ? "text" : "password";
-      el.btnToggleKey.textContent = hidden ? "Ocultar" : "Mostrar";
+      el.btnToggleKey.textContent = hidden ? "Hide" : "Show";
     });
     el.btnSaveProviderCfg.addEventListener("click", () => {
       const pid = el.modalProviderSelect.value;
@@ -1406,7 +1380,7 @@
       syncSessionCredentials();
       updateCredentialStatus(getProviderSpec(state.currentProvider));
       closeTopLayer(el.modalAi);
-      showToast("Configuración de proveedor guardada.");
+      showToast("Provider configuration saved.");
     });
     el.btnClearProviderKey.addEventListener("click", () => {
       const pid = el.modalProviderSelect.value;
@@ -1414,17 +1388,17 @@
       el.modalApiKey.value = "";
       syncSessionCredentials();
       updateCredentialStatus(getProviderSpec(state.currentProvider));
-      showToast("Clave eliminada.");
+      showToast("API key cleared.");
     });
 
     el.btnCopyPrompt.addEventListener("click", () => {
       navigator.clipboard
         .writeText(state.systemPromptText)
-        .then(() => showToast("System Prompt copiado."))
-        .catch(() => showToast("Error al copiar.", true));
+        .then(() => showToast("System prompt copied."))
+        .catch(() => showToast("Failed to copy.", true));
     });
 
-    // Atajos de teclado globales
+    // Global Keyboard Shortcuts
     window.addEventListener("keydown", (e) => {
       const mod = e.ctrlKey || e.metaKey;
       const tag = document.activeElement?.tagName;
@@ -1438,8 +1412,8 @@
       if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (state.activeTab === "editor") {
-          validateAndApplyMermaid(el.mermaidCodeInput.value, { pushHistory: true, label: "Edición (Ctrl+S)" });
-        } else {
+          validateAndApplyMermaid(el.mermaidCodeInput.value, { pushHistory: true, label: "Mermaid Edit (Ctrl+S)" });
+        } else if (state.currentMermaid) {
           exportAsSvg();
         }
         return;
@@ -1460,13 +1434,13 @@
   }
 
   function updateCharCount() {
-    el.charCounter.textContent = `${el.processDescription.value.length.toLocaleString()} caracteres`;
+    el.charCounter.textContent = `${el.processDescription.value.length.toLocaleString()} characters`;
   }
 
   function setBusy(busy, message = "") {
     el.btnGenerate.disabled = busy;
     el.btnGenerate.setAttribute("aria-busy", String(busy));
-    el.btnGenerateLabel.textContent = busy ? "Procesando…" : "Generar Arquitectura";
+    el.btnGenerateLabel.textContent = busy ? "Processing…" : "Generate Architecture";
     if (busy && message) setStatus("working", message);
   }
 
@@ -1481,8 +1455,6 @@
     setTimeout(() => toast.remove(), 3400);
   }
 
-  // Exportar helper interno para pruebas o depuración si fuera necesario
   window.__ALVEA_SAFE_SET_HTML = safeSetHTML;
-
   document.addEventListener("DOMContentLoaded", init);
 })();

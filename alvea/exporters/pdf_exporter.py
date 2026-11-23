@@ -1,4 +1,4 @@
-"""Exportador de Reporte Ejecutivo en PDF multipágina (ReportLab 4.4 + Pillow 12.1)."""
+"""Executive Multipage PDF Exporter (ReportLab 4.4 + Pillow 12.1, English Default)."""
 
 from __future__ import annotations
 
@@ -29,14 +29,10 @@ BRAND_NAVY = colors.HexColor("#1E3A5F")
 BRAND_SLATE = colors.HexColor("#475569")
 SURFACE_LIGHT = colors.HexColor("#F6F5F0")
 BORDER_GRAY = colors.HexColor("#CBD5E1")
-ACCENT_INDIGO = colors.HexColor("#4338CA")
-SEM_GREEN = colors.HexColor("#15803D")
-SEM_AMBER = colors.HexColor("#B45309")
-SEM_RED = colors.HexColor("#B91C1C")
 
 
 def _to_winansi_safe(text: str) -> str:
-    """Reemplaza glifos Unicode no soportados por Helvetica/Courier (WinAnsiEncoding)."""
+    """Normalize non-WinAnsi Unicode glyphs for ReportLab Type-1 Helvetica/Courier."""
     return (
         str(text or "")
         .replace("→", "->")
@@ -65,7 +61,7 @@ def _build_embedded_diagram(diagram_png_base64: str | None, max_w: float, max_h:
         with PILImage.open(io.BytesIO(img_bytes)) as pil_img:
             if pil_img.format != "PNG":
                 return None
-            # Validar dimensiones ANTES de decodificar píxeles (anti Decompression Bomb)
+            # Check dimensions BEFORE pixel decode (anti-decompression bomb)
             w, h = pil_img.size
             if w <= 0 or h <= 0 or w > 10_000 or h > 10_000 or (w * h) > 25_000_000:
                 return None
@@ -81,8 +77,8 @@ def _build_embedded_diagram(diagram_png_base64: str | None, max_w: float, max_h:
         return None
 
 
-def _build_vector_schematic(graph: ProcessGraph, width: float = 17.0 * cm) -> Drawing:
-    """Genera un diagrama vectorial esquemático nativo de carriles cuando no se adjunta PNG."""
+def _build_vector_schematic(graph: ProcessGraph, width: float = 17.2 * cm) -> Drawing:
+    """Generates a native ReportLab vector swimlane schematic when no PNG is attached."""
     lanes = graph.lanes[:6]
     lane_h = 34
     height = max(90, len(lanes) * lane_h + 24)
@@ -93,25 +89,33 @@ def _build_vector_schematic(graph: ProcessGraph, width: float = 17.0 * cm) -> Dr
         if n.lane_id in nodes_by_lane:
             nodes_by_lane[n.lane_id].append(n)
 
+    fill_map = {
+        "start": colors.HexColor("#DCFCE7"),
+        "end_success": colors.HexColor("#DCFCE7"),
+        "end_reject": colors.HexColor("#FEE2E2"),
+        "decision": colors.HexColor("#FEF9C3"),
+        "system": colors.HexColor("#E0F2FE"),
+        "subprocess": colors.HexColor("#EDE9FE"),
+        "wait": colors.HexColor("#FFF7ED"),
+        "parallel": colors.HexColor("#CCFBF1"),
+        "task": colors.white,
+    }
+
     for idx, lane in enumerate(lanes):
         y = height - (idx + 1) * lane_h - 10
         bg = colors.HexColor("#F8FAFC") if idx % 2 == 0 else colors.white
         drawing.add(Rect(0, y, width, lane_h - 3, fillColor=bg, strokeColor=BORDER_GRAY, strokeWidth=0.6))
         drawing.add(Rect(0, y, 105, lane_h - 3, fillColor=BRAND_NAVY, strokeColor=BRAND_NAVY, strokeWidth=0.6))
-        lane_lbl = (lane.name[:17] + "…") if len(lane.name) > 18 else lane.name
+        lane_lbl = _to_winansi_safe((lane.name[:17] + "...") if len(lane.name) > 18 else lane.name)
         drawing.add(String(6, y + 11, lane_lbl, fontName="Helvetica-Bold", fontSize=7.5, fillColor=colors.white))
 
         ln_nodes = nodes_by_lane.get(lane.id, [])[:5]
         x = 116
         step_w = max(58, (width - 130) / max(1, len(ln_nodes)) - 8)
         for n_idx, node in enumerate(ln_nodes):
-            fill = colors.HexColor("#DCFCE7") if node.node_type.value == "start" else (
-                colors.HexColor("#FEF9C3") if node.node_type.value == "decision" else (
-                    colors.HexColor("#FEE2E2") if node.node_type.value == "end_reject" else colors.white
-                )
-            )
+            fill = fill_map.get(node.node_type.value, colors.white)
             drawing.add(Rect(x, y + 5, min(step_w, 96), lane_h - 13, rx=4, ry=4, fillColor=fill, strokeColor=BRAND_SLATE, strokeWidth=0.6))
-            nlbl = (node.label[:15] + "…") if len(node.label) > 16 else node.label
+            nlbl = _to_winansi_safe((node.label[:15] + "...") if len(node.label) > 16 else node.label)
             drawing.add(String(x + 4, y + 12, nlbl, fontName="Helvetica", fontSize=6.5, fillColor=colors.HexColor("#0F172A")))
             if n_idx < len(ln_nodes) - 1:
                 x2 = x + min(step_w, 96)
@@ -129,7 +133,7 @@ def export_executive_pdf(
     mermaid_code: str,
     diagram_png_base64: str | None = None,
 ) -> bytes:
-    """Genera el Reporte Ejecutivo ALVEA en PDF listo para descarga."""
+    """Builds the multipage ALVEA Executive Report PDF in memory."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -138,7 +142,7 @@ def export_executive_pdf(
         rightMargin=1.8 * cm,
         topMargin=1.8 * cm,
         bottomMargin=1.8 * cm,
-        title=f"ALVEA — {report.title}",
+        title=_to_winansi_safe(f"ALVEA - {report.title}"),
         author="ALVEA Process Architecture Studio",
     )
 
@@ -147,7 +151,7 @@ def export_executive_pdf(
         "AlveaTitle",
         parent=styles["Heading1"],
         fontName="Helvetica-Bold",
-        fontSize=16,
+        fontSize=15.5,
         textColor=colors.white,
         leading=20,
     )
@@ -190,16 +194,16 @@ def export_executive_pdf(
     story: list = []
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    # 1. Banner Ejecutivo
+    # 1. Executive Banner
     banner_table = Table(
         [
             [
-                _safe_p(f"ALVEA — {report.title}", title_style),
-                _safe_p(f"Grado: {report.efficiency_grade}", title_style),
+                _safe_p(f"ALVEA - {report.title}", title_style),
+                _safe_p(f"Grade: {report.efficiency_grade}", title_style),
             ],
             [
                 _safe_p(
-                    f"Reporte Ejecutivo de Arquitectura de Procesos (BPA + NetworkX) · Orientación: graph {graph.direction.value}",
+                    f"Executive Process Architecture Report (BPA + NetworkX) | Orientation: graph {graph.direction.value}",
                     subtitle_style,
                 ),
                 _safe_p(timestamp, subtitle_style),
@@ -223,14 +227,14 @@ def export_executive_pdf(
     story.append(banner_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    # 2. Resumen Ejecutivo
-    story.append(_safe_p("1. Resumen Ejecutivo", h2_style))
+    # 2. Executive Summary
+    story.append(_safe_p("1. Executive Summary", h2_style))
     story.append(_safe_p(report.summary, body_style))
     story.append(Spacer(1, 0.3 * cm))
 
-    # 3. Tarjetas KPI NetworkX
+    # 3. NetworkX KPI Table
     kpi_data = [
-        ["Carriles", "Nodos / Aristas", "Complejidad", "Automatización", "Handoffs", "Bucles"],
+        ["Swimlanes", "Nodes / Edges", "Complexity", "Automation", "Handoffs", "Loops"],
         [
             str(analytics.lane_count),
             f"{analytics.node_count} / {analytics.edge_count}",
@@ -262,21 +266,18 @@ def export_executive_pdf(
     story.append(kpi_table)
     story.append(Spacer(1, 0.4 * cm))
 
-    # 4. Visualización del Diagrama
-    story.append(_safe_p("2. Arquitectura Visual Swimlane", h2_style))
+    # 4. Swimlane Visual Diagram
+    story.append(_safe_p("2. Swimlane Architecture Visual", h2_style))
     embedded_img = _build_embedded_diagram(diagram_png_base64, max_w=17.2 * cm, max_h=8.5 * cm)
-    if embedded_img is not None:
-        story.append(embedded_img)
-    else:
-        story.append(_build_vector_schematic(graph, width=17.2 * cm))
+    story.append(embedded_img if embedded_img is not None else _build_vector_schematic(graph, width=17.2 * cm))
     story.append(Spacer(1, 0.35 * cm))
 
-    # 5. Desglose por Carril
-    story.append(_safe_p("3. Distribución de Carga por Carril (Swimlanes)", h2_style))
-    lane_rows = [["Carril / Actor", "Tipo", "Nodos", "% Carga", "Auto.", "Handoffs (In/Out)"]]
+    # 5. Lane Breakdown
+    story.append(_safe_p("3. Workload Distribution by Swimlane", h2_style))
+    lane_rows = [["Swimlane / Actor", "Kind", "Nodes", "Share", "Auto.", "Handoffs (In/Out)"]]
     for lm in analytics.lane_metrics:
         lane_rows.append([
-            lm.lane_name,
+            _to_winansi_safe(lm.lane_name),
             lm.kind.capitalize(),
             str(lm.node_count),
             f"{lm.workload_pct}%",
@@ -302,39 +303,35 @@ def export_executive_pdf(
     story.append(lane_table)
     story.append(Spacer(1, 0.3 * cm))
 
-    # 6. Marco Cognitivo BPA (Fases A, B, C)
-    story.append(_safe_p("4. Marco Cognitivo Aplicado (Fases A, B y C)", h2_style))
+    # 6. Cognitive Framework (Phases A, B, C)
+    story.append(_safe_p("4. BPA Cognitive Decomposition (Phases A, B & C)", h2_style))
     actors_txt = ", ".join(f"{a['name']} ({a['nodes']})" for a in report.cognitive.phase_a_actors)
-    story.append(_safe_p(f"Fase A (Actores/Carriles): {actors_txt}", body_style))
-    story.append(_safe_p(f"Fase B (Decisiones): {' | '.join(report.cognitive.phase_b_decisions[:5])}", body_style))
-    story.append(_safe_p(f"Fase C (Rutas): {report.cognitive.phase_c_routes}", body_style))
+    story.append(_safe_p(f"Phase A (Actors / Swimlanes): {actors_txt}", body_style))
+    story.append(_safe_p(f"Phase B (Gateways & Decisions): {' | '.join(report.cognitive.phase_b_decisions[:5])}", body_style))
+    story.append(_safe_p(f"Phase C (Routes & Optimization): {report.cognitive.phase_c_routes}", body_style))
     story.append(Spacer(1, 0.25 * cm))
 
-    # 7. Analítica NetworkX: Camino Crítico, Cuellos de Botella y Bucles
-    story.append(_safe_p("5. Diagnóstico Estructural NetworkX", h2_style))
-    cp_chain = " -> ".join(analytics.critical_path_labels) if analytics.critical_path_labels else "No calculable"
-    story.append(_safe_p(f"Camino crítico ({len(analytics.critical_path)} pasos · peso {analytics.critical_path_weight}): {cp_chain}", body_style))
+    # 7. NetworkX Structural Diagnostics
+    story.append(_safe_p("5. NetworkX Structural Diagnostics", h2_style))
+    cp_chain = " -> ".join(analytics.critical_path_labels) if analytics.critical_path_labels else "N/A"
+    cp_unit = f"{analytics.estimated_cycle_time_min} min" if analytics.estimated_cycle_time_min is not None else f"{analytics.critical_path_weight} pts"
+    story.append(_safe_p(f"Critical Path ({len(analytics.critical_path)} steps | {cp_unit}): {cp_chain}", body_style))
     story.append(Spacer(1, 0.15 * cm))
     for finding in report.bottleneck_findings:
-        story.append(_safe_p(f"- Cuello de botella: {finding}", body_style))
+        story.append(_safe_p(f"- Bottleneck: {finding}", body_style))
     for rework in report.rework_findings:
-        story.append(_safe_p(f"- Retrabajo / Bucles: {rework}", body_style))
+        story.append(_safe_p(f"- Rework / Loops: {rework}", body_style))
     for anom in report.anomalies[:4]:
-        story.append(_safe_p(f"- Anomalía [{anom.severity.upper()}]: {anom.message}", body_style))
+        story.append(_safe_p(f"- Anomaly [{anom.severity.upper()}]: {anom.message}", body_style))
 
-    # 8. Plan de Recomendaciones
-    story.append(_safe_p("6. Plan de Recomendaciones Prioritarias", h2_style))
+    # 8. Priority Recommendations
+    story.append(_safe_p("6. Actionable Recommendations", h2_style))
     for rec in report.recommendations:
-        story.append(
-            _safe_p(
-                f"[{rec.priority} · {rec.category}] {rec.title}: {rec.detail}",
-                body_style,
-            )
-        )
+        story.append(_safe_p(f"[{rec.priority} | {rec.category}] {rec.title}: {rec.detail}", body_style))
         story.append(Spacer(1, 0.1 * cm))
 
-    # 9. Apéndice Técnico Mermaid (WinAnsi-safe y con maxLineLength)
-    story.append(_safe_p("7. Apéndice Técnico: Código Mermaid.js", h2_style))
+    # 9. Technical Mermaid Appendix
+    story.append(_safe_p("7. Technical Appendix: Mermaid.js Source", h2_style))
     story.append(Preformatted(_to_winansi_safe(mermaid_code[:3800]), mono_style, maxLineLength=102))
 
     doc.build(story)

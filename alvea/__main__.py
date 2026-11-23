@@ -1,4 +1,4 @@
-"""Punto de entrada ejecutable: python -m alvea."""
+"""Executable entry point: python -m alvea."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from alvea.server.app import run_server
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="ALVEA — Estudio de Arquitectura e Inteligencia de Procesos")
-    parser.add_argument("--host", default=SETTINGS.host, help="Interfaz de escucha (por defecto: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=SETTINGS.port, help="Puerto HTTP inicial (por defecto: 8000)")
-    parser.add_argument("--open", dest="open_browser", action="store_true", help="Abrir el navegador automáticamente")
-    parser.add_argument("--no-auto-port", action="store_true", help="No buscar otro puerto si el indicado está ocupado")
-    parser.add_argument("--check", action="store_true", help="Verificar entorno y dependencias sin iniciar el servidor")
+    parser = argparse.ArgumentParser(description="ALVEA — Process Architecture & Intelligence Studio")
+    parser.add_argument("--host", default=SETTINGS.host, help="Bind interface (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=SETTINGS.port, help="Initial HTTP port (default: 8000)")
+    parser.add_argument("--open", dest="open_browser", action="store_true", help="Open default browser automatically")
+    parser.add_argument("--no-auto-port", action="store_true", help="Fail instead of scanning next free port")
+    parser.add_argument("--check", action="store_true", help="Verify runtime environment without starting server")
     args = parser.parse_args(argv)
 
     if args.check:

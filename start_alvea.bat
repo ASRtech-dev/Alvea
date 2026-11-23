@@ -1,13 +1,13 @@
 @echo off
 setlocal EnableExtensions
-title ALVEA - Estudio de Arquitectura e Inteligencia de Procesos
+title ALVEA - Process Architecture and Intelligence Studio
 
-rem Cambiar al directorio donde vive este script (soporta unidades distintas y espacios)
+rem Switch to the directory containing this launcher (supports spaces and other drives)
 cd /d "%~dp0"
 
 echo.
 echo ========================================================
-echo   ALVEA - Iniciando Estudio de Procesos...
+echo   ALVEA v3.0 - Starting Process Architecture Studio...
 echo ========================================================
 echo.
 
@@ -15,14 +15,14 @@ set "PYTHON_EXE="
 set "PYTHON_ARGS="
 set "USE_VENV=0"
 
-rem 1. Priorizar entorno virtual local (.venv) si existe
+rem 1. Prefer local virtual environment (.venv) if present
 if exist ".venv\Scripts\python.exe" (
     set "PYTHON_EXE=.venv\Scripts\python.exe"
     set "USE_VENV=1"
     goto :check_deps
 )
 
-rem 2. Detectar Python 3.11+ instalado en el sistema (python, py -3, python3)
+rem 2. Detect Python 3.11+ on PATH (python, py -3, python3)
 where python >nul 2>&1
 if not errorlevel 1 (
     python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
@@ -51,23 +51,23 @@ if not errorlevel 1 (
     )
 )
 
-echo [ERROR] No se encontro Python 3.11 o superior en el sistema.
-echo Descarga Python desde: https://www.python.org/downloads/
-echo Durante la instalacion marca la casilla "Add python.exe to PATH".
+echo [ERROR] Python 3.11 or newer was not found on this machine.
+echo Download Python from: https://www.python.org/downloads/
+echo Make sure to check "Add python.exe to PATH" during installation.
 echo.
 pause
 exit /b 1
 
 :check_deps
-rem Verificar dependencias requeridas sin retrasar el arranque
+rem Verify required Python packages
 "%PYTHON_EXE%" %PYTHON_ARGS% -c "import pydantic, networkx, httpx, reportlab, yaml, PIL" >nul 2>&1
 if not errorlevel 1 goto :launch
 
-echo [INFO] Faltan dependencias de Python. Preparando entorno virtual (.venv)...
+echo [INFO] Missing Python dependencies. Creating local virtual environment (.venv)...
 if "%USE_VENV%"=="0" (
     "%PYTHON_EXE%" %PYTHON_ARGS% -m venv .venv
     if errorlevel 1 (
-        echo [ERROR] No se pudo crear el entorno virtual .venv.
+        echo [ERROR] Failed to create .venv virtual environment.
         pause
         exit /b 1
     )
@@ -75,18 +75,18 @@ if "%USE_VENV%"=="0" (
     set "PYTHON_ARGS="
 )
 
-echo [INFO] Instalando dependencias desde requirements.txt...
+echo [INFO] Installing dependencies from requirements.txt...
 "%PYTHON_EXE%" -m pip install --upgrade pip >nul 2>&1
 "%PYTHON_EXE%" -m pip install -r requirements.txt
 if errorlevel 1 (
     echo.
-    echo [ERROR] Fallo la instalacion de dependencias. Verifica tu conexion a internet.
+    echo [ERROR] Dependency installation failed. Please check your internet connection.
     pause
     exit /b 1
 )
 
 :launch
-rem Si se pasan argumentos (ej. --check o --port 8080), reenviarlos directamente
+rem Forward any CLI arguments (e.g. --check or --port 8080), otherwise auto-open browser
 if "%~1"=="" (
     "%PYTHON_EXE%" %PYTHON_ARGS% run_alvea.py --open
 ) else (
@@ -96,7 +96,7 @@ if "%~1"=="" (
 set "EXIT_CODE=%errorlevel%"
 if not "%EXIT_CODE%"=="0" (
     echo.
-    echo [ERROR] ALVEA finalizo con codigo de error %EXIT_CODE%.
+    echo [ERROR] ALVEA exited with code %EXIT_CODE%.
     pause
 )
 exit /b %EXIT_CODE%

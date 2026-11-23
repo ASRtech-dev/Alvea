@@ -1,8 +1,8 @@
-"""Motor de Analítica de Procesos con NetworkX 3.7.
+"""ALVEA v3.0 NetworkX Process Analytics Engine.
 
-Calcula ciclos de retrabajo, condensación DAG y camino crítico ponderado,
-centralidad de intermediación (cuellos de botella), complejidad ciclomática
-de McCabe, tasa de automatización, presión de handoffs y anomalías estructurales.
+Computes rework cycles, DAG condensation and weighted critical path (with explicit
+duration/SLA minutes when present), betweenness-centrality bottlenecks, McCabe
+cyclomatic complexity, automation ratio, inter-lane handoffs, and structural anomalies.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from alvea.models import (
 
 
 class GraphAnalyzer:
-    """Analizador estructural de grafos BPA basado en NetworkX."""
+    """Structural BPA graph analyzer powered by NetworkX."""
 
     MAX_CYCLES = 25
 
@@ -48,43 +48,55 @@ class GraphAnalyzer:
             is_handoff = u_lane != v_lane
             if is_handoff:
                 handoff_count += 1
-            G.add_edge(
-                edge.source,
-                edge.target,
-                label=edge.label or "",
-                is_loop=edge.is_loop,
-                is_handoff=is_handoff,
-                weight=node_by_id[edge.target].duration_weight,
-            )
+            w = node_by_id[edge.target].duration_weight
+            if G.has_edge(edge.source, edge.target):
+                # Preserve max weight on multi-edges in DiGraph projection
+                G[edge.source][edge.target]["weight"] = max(G[edge.source][edge.target]["weight"], w)
+            else:
+                G.add_edge(
+                    edge.source,
+                    edge.target,
+                    label=edge.label or "",
+                    is_loop=edge.is_loop,
+                    is_parallel=edge.is_parallel,
+                    is_handoff=is_handoff,
+                    weight=w,
+                )
 
         n_count = G.number_of_nodes()
         e_count = len(graph.edges)
         decision_count = sum(1 for n in graph.nodes if n.node_type == NodeType.DECISION)
+        parallel_count = sum(1 for n in graph.nodes if n.node_type == NodeType.PARALLEL)
+        wait_count = sum(1 for n in graph.nodes if n.node_type == NodeType.WAIT)
+        system_count = sum(1 for n in graph.nodes if n.node_type == NodeType.SYSTEM)
         components = nx.number_weakly_connected_components(G) if n_count > 0 else 1
 
-        # Complejidad ciclomática de McCabe: M = E - N + 2P (mínimo 1)
+        # McCabe cyclomatic complexity: M = E - N + 2P (min 1)
         cyclomatic = max(1, e_count - n_count + 2 * components)
         if cyclomatic <= 4:
-            complexity_level = "Baja"
+            complexity_level = "Low"
         elif cyclomatic <= 10:
-            complexity_level = "Moderada"
+            complexity_level = "Moderate"
         else:
-            complexity_level = "Alta"
+            complexity_level = "High"
 
-        # Ratio de automatización sobre tareas y decisiones
+        # Automation ratio over operational steps (task, system, subprocess, decision, wait)
         operational_nodes = [
-            n for n in graph.nodes if n.node_type in (NodeType.TASK, NodeType.DECISION, NodeType.SUBPROCESS)
+            n for n in graph.nodes
+            if n.node_type in (NodeType.TASK, NodeType.SYSTEM, NodeType.DECISION, NodeType.SUBPROCESS, NodeType.WAIT)
         ]
         if operational_nodes:
             auto_ratio = round(
-                sum(1 for n in operational_nodes if n.is_automated) / len(operational_nodes), 3
+                sum(1 for n in operational_nodes if n.is_automated or n.node_type == NodeType.SYSTEM)
+                / len(operational_nodes),
+                3,
             )
         else:
             auto_ratio = 0.0
 
         handoff_ratio = round(min(1.0, handoff_count / e_count), 3) if e_count > 0 else 0.0
 
-        # Detección de ciclos simples (acotada a MAX_CYCLES para estabilidad)
+        # Bounded simple cycle detection
         raw_cycles = list(itertools.islice(nx.simple_cycles(G), self.MAX_CYCLES))
         raw_cycles.sort(key=len)
 
@@ -103,20 +115,24 @@ class GraphAnalyzer:
                 )
             )
 
-        # Condensación a DAG y Camino Crítico ponderado
-        critical_path, critical_weight = self._compute_critical_path(G, back_edges, node_by_id)
+        # DAG condensation & weighted critical path (with super-source to include start weight)
+        critical_path, critical_weight = self._compute_critical_path(G, graph, back_edges, node_by_id)
         critical_labels = [node_by_id[nid].label for nid in critical_path if nid in node_by_id]
 
-        # Centralidad de intermediación y Cuellos de Botella
+        has_explicit_durations = any(n.estimated_duration_min is not None for n in graph.nodes)
+        duration_unit = "min" if has_explicit_durations else "pts"
+        estimated_cycle_time_min = round(critical_weight, 1) if has_explicit_durations else None
+
+        # Betweenness centrality & bottleneck ranking
         bottlenecks = self._compute_bottlenecks(G, graph, lane_by_id)
 
-        # Auditoría de anomalías estructurales
+        # Structural anomaly audit
         anomalies = self._detect_anomalies(G, graph)
 
-        # Métricas por carril
+        # Per-lane metrics
         lane_metrics = self._compute_lane_metrics(G, graph)
 
-        # Calificación ejecutiva de eficiencia (A+ .. D)
+        # Operational efficiency grade (A+ .. C)
         efficiency_grade = self._compute_efficiency_grade(
             auto_ratio=auto_ratio,
             handoff_ratio=handoff_ratio,
@@ -130,6 +146,9 @@ class GraphAnalyzer:
             edge_count=e_count,
             lane_count=len(graph.lanes),
             decision_count=decision_count,
+            parallel_count=parallel_count,
+            wait_count=wait_count,
+            system_count=system_count,
             cyclomatic_complexity=cyclomatic,
             complexity_level=complexity_level,
             automation_ratio=auto_ratio,
@@ -139,6 +158,8 @@ class GraphAnalyzer:
             critical_path=critical_path,
             critical_path_labels=critical_labels,
             critical_path_weight=round(critical_weight, 2),
+            duration_unit=duration_unit,
+            estimated_cycle_time_min=estimated_cycle_time_min,
             cycles=cycles,
             bottlenecks=bottlenecks,
             anomalies=anomalies,
@@ -147,7 +168,6 @@ class GraphAnalyzer:
 
     @staticmethod
     def _find_dfs_back_edges(G: nx.DiGraph, graph: ProcessGraph) -> set[tuple[str, str]]:
-        """Identifica aristas de retorno mediante DFS desde los nodos de inicio."""
         back_edges: set[tuple[str, str]] = {
             (e.source, e.target) for e in graph.edges if e.is_loop
         }
@@ -155,7 +175,7 @@ class GraphAnalyzer:
         if not starts:
             starts = [n for n in G.nodes if G.in_degree(n) == 0] or list(G.nodes)[:1]
 
-        state: dict[str, int] = {}  # 0=unvisited, 1=visiting, 2=done
+        state: dict[str, int] = {}
 
         def dfs(u: str) -> None:
             state[u] = 1
@@ -179,6 +199,7 @@ class GraphAnalyzer:
     @staticmethod
     def _compute_critical_path(
         G: nx.DiGraph,
+        graph: ProcessGraph,
         back_edges: set[tuple[str, str]],
         node_by_id: dict,
     ) -> tuple[list[str], float]:
@@ -190,7 +211,6 @@ class GraphAnalyzer:
             if G_dag.has_edge(u, v):
                 G_dag.remove_edge(u, v)
 
-        # Garantizar DAG estricto si quedaran ciclos residuales
         safety = 0
         while not nx.is_directed_acyclic_graph(G_dag) and safety < 50:
             safety += 1
@@ -204,9 +224,21 @@ class GraphAnalyzer:
         if not nx.is_directed_acyclic_graph(G_dag):
             return [], 0.0
 
-        path = nx.dag_longest_path(G_dag, weight="weight")
+        # Add temporary super-source so start node's own weight is included in dag_longest_path
+        super_src = "__ALVEA_SRC__"
+        starts = [n.id for n in graph.nodes if n.node_type == NodeType.START]
+        if not starts:
+            starts = [n for n in G_dag.nodes if G_dag.in_degree(n) == 0] or list(G_dag.nodes)[:1]
+
+        G_dag.add_node(super_src)
+        for s in starts:
+            if s in node_by_id:
+                G_dag.add_edge(super_src, s, weight=node_by_id[s].duration_weight)
+
+        raw_path = nx.dag_longest_path(G_dag, weight="weight")
+        path = [nid for nid in raw_path if nid != super_src]
         weight = sum(node_by_id[nid].duration_weight for nid in path if nid in node_by_id)
-        return list(path), float(weight)
+        return path, float(weight)
 
     @staticmethod
     def _compute_bottlenecks(
@@ -223,7 +255,7 @@ class GraphAnalyzer:
 
         candidates: list[BottleneckInfo] = []
         for node in graph.nodes:
-            if node.node_type in (NodeType.START, NodeType.END_SUCCESS, NodeType.END_REJECT):
+            if node.node_type in (NodeType.START, NodeType.END_SUCCESS, NodeType.END_REJECT, NodeType.PARALLEL):
                 continue
             in_d = G.in_degree(node.id)
             out_d = G.out_degree(node.id)
@@ -233,9 +265,10 @@ class GraphAnalyzer:
                 1 for _, _, d in G.out_edges(node.id, data=True) if d.get("is_handoff")
             )
             bc_val = float(bc.get(node.id, 0.0))
-            is_manual = not node.is_automated
+            is_manual = not (node.is_automated or node.node_type == NodeType.SYSTEM)
+            wait_penalty = 0.12 if node.node_type == NodeType.WAIT else 0.0
             risk = round(
-                min(1.0, bc_val * 0.52 + ((in_d + out_d) / max_deg) * 0.28 + (0.20 if is_manual else 0.0)),
+                min(1.0, bc_val * 0.50 + ((in_d + out_d) / max_deg) * 0.25 + (0.18 if is_manual else 0.0) + wait_penalty),
                 3,
             )
             candidates.append(
@@ -283,7 +316,7 @@ class GraphAnalyzer:
                     AnomalyInfo(
                         kind="orphan",
                         node_id=node.id,
-                        message=f"El nodo '{node.label}' está completamente desconectado del flujo.",
+                        message=f"Node '{node.label}' is completely disconnected from the workflow.",
                         severity="high",
                     )
                 )
@@ -292,7 +325,7 @@ class GraphAnalyzer:
                     AnomalyInfo(
                         kind="unreachable",
                         node_id=node.id,
-                        message=f"El nodo '{node.label}' no es alcanzable desde ningún inicio del proceso.",
+                        message=f"Node '{node.label}' is unreachable from any process start node.",
                         severity="medium",
                     )
                 )
@@ -302,7 +335,7 @@ class GraphAnalyzer:
                     AnomalyInfo(
                         kind="dead_end",
                         node_id=node.id,
-                        message=f"'{node.label}' termina sin salida ni nodo de cierre explícito.",
+                        message=f"'{node.label}' ends without an outgoing transition or terminal end node.",
                         severity="high",
                     )
                 )
@@ -312,7 +345,7 @@ class GraphAnalyzer:
                     AnomalyInfo(
                         kind="incomplete_decision",
                         node_id=node.id,
-                        message=f"La decisión '{node.label}' solo tiene {out_d} rama(s) de salida (requiere ≥ 2).",
+                        message=f"Decision '{node.label}' has only {out_d} outgoing branch(es) (requires >= 2).",
                         severity="high",
                     )
                 )
@@ -323,7 +356,7 @@ class GraphAnalyzer:
                     AnomalyInfo(
                         kind="empty_lane",
                         node_id=lane.id,
-                        message=f"El carril '{lane.name}' no contiene actividades asignadas.",
+                        message=f"Swimlane '{lane.name}' has no assigned activities.",
                         severity="low",
                     )
                 )
@@ -339,10 +372,10 @@ class GraphAnalyzer:
         for lane in graph.lanes:
             ln_nodes = [n for n in graph.nodes if n.lane_id == lane.id]
             h_in = sum(
-                1 for u, v in G.edges() if node_lane.get(v) == lane.id and node_lane.get(u) != lane.id
+                1 for e in graph.edges if node_lane.get(e.target) == lane.id and node_lane.get(e.source) != lane.id
             )
             h_out = sum(
-                1 for u, v in G.edges() if node_lane.get(u) == lane.id and node_lane.get(v) != lane.id
+                1 for e in graph.edges if node_lane.get(e.source) == lane.id and node_lane.get(e.target) != lane.id
             )
             metrics.append(
                 LaneMetric(
@@ -351,7 +384,7 @@ class GraphAnalyzer:
                     kind=lane.kind.value,
                     node_count=len(ln_nodes),
                     workload_pct=round((len(ln_nodes) / total) * 100.0, 1),
-                    automated_count=sum(1 for n in ln_nodes if n.is_automated),
+                    automated_count=sum(1 for n in ln_nodes if n.is_automated or n.node_type == NodeType.SYSTEM),
                     handoffs_in=h_in,
                     handoffs_out=h_out,
                 )

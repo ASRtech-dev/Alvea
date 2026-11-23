@@ -1,4 +1,4 @@
-"""Pipeline unificado de generación con auto-reparación en 5 niveles y telemetría."""
+"""Unified ALVEA v3.0 workflow generation pipeline with 5-level self-repair and telemetry."""
 
 from __future__ import annotations
 
@@ -26,12 +26,33 @@ from alvea.engine.mermaid import (
     strip_security_threats,
 )
 from alvea.engine.nlp_parser import LocalBPAEngine
-from alvea.engine.presets import match_preset_by_text
 from alvea.engine.report import ReportBuilder
 from alvea.models import Direction, ProcessGraph
 from alvea.security import SSRFBlockedError
 
 THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+VALID_NODE_TYPES = frozenset({
+    "start", "task", "system", "subprocess", "wait", "decision", "parallel", "end_success", "end_reject"
+})
+
+NODE_TYPE_ALIASES = {
+    "service": "system",
+    "api": "system",
+    "automated": "system",
+    "bot": "system",
+    "database": "system",
+    "delay": "wait",
+    "timer": "wait",
+    "queue": "wait",
+    "sla": "wait",
+    "approval_wait": "wait",
+    "gateway": "decision",
+    "branch": "decision",
+    "condition": "decision",
+    "fork": "parallel",
+    "join": "parallel",
+}
 
 
 @dataclass
@@ -44,8 +65,31 @@ class PipelineOutcome:
     meta: dict[str, Any]
 
 
+def _coerce_duration_minutes(val: Any) -> float | None:
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float)):
+        return float(val) if val >= 0 else None
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(s|m|h|d|w)?", str(val).strip(), re.I)
+    if not m:
+        return None
+    num = float(m.group(1).replace(",", "."))
+    if num < 0:
+        return None
+    unit = (m.group(2) or "m").lower()
+    if unit == "w":
+        return round(num * 2400.0, 1)
+    if unit == "d":
+        return round(num * 480.0, 1)
+    if unit == "h":
+        return round(num * 60.0, 1)
+    if unit == "s":
+        return round(max(0.1, num / 60.0), 2)
+    return round(num, 1)
+
+
 def strip_reasoning_and_extract_json(raw_text: str) -> str:
-    """Limpia bloques <think>...</think>, fences Markdown y extrae el objeto JSON."""
+    """Strips <think>...</think> blocks, Markdown fences, and extracts the first balanced JSON object."""
     cleaned = THINK_BLOCK_RE.sub("", raw_text or "").strip()
     m_fence = re.search(r"```(?:json)?\s*\n(.*?)```", cleaned, re.DOTALL | re.IGNORECASE)
     if m_fence:
@@ -55,7 +99,6 @@ def strip_reasoning_and_extract_json(raw_text: str) -> str:
     if start == -1:
         return cleaned
 
-    # Extraer primer objeto balanceado {...}
     depth = 0
     in_str = False
     escape = False
@@ -81,21 +124,23 @@ def strip_reasoning_and_extract_json(raw_text: str) -> str:
 
 
 def repair_and_parse_json_dict(raw_text: str) -> dict[str, Any]:
-    """Sanitizador JSON local tolerante a fallos comunes de LLMs pequeños."""
+    """Local JSON sanitizer tolerant of common small-LLM formatting mistakes."""
     candidate = strip_reasoning_and_extract_json(raw_text)
     candidate = candidate.replace("\u201c", '"').replace("\u201d", '"').replace("\u2018", "'").replace("\u2019", "'")
-    # Corregir trailing commas antes de } o ]
     candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
-    # Corregir booleanos/None estilo Python SOLO como valores JSON (sin mutar strings como "True Positive")
     candidate = re.sub(r"(?<=[:\[,\s])\bTrue\b(?=\s*[,}\]])", "true", candidate)
     candidate = re.sub(r"(?<=[:\[,\s])\bFalse\b(?=\s*[,}\]])", "false", candidate)
     candidate = re.sub(r"(?<=[:\[,\s])\bNone\b(?=\s*[,}\]])", "null", candidate)
 
     data = json.loads(candidate)
     if not isinstance(data, dict):
-        raise ValueError("La raíz JSON debe ser un objeto.")
+        raise ValueError("JSON root must be an object.")
 
-    # Normalizar alias frecuentes de LLMs
+    # Normalize language to Literal["en", "es"]
+    raw_lang = str(data.get("language") or "en").strip().lower()
+    data["language"] = "es" if raw_lang.startswith(("es", "span")) else "en"
+
+    # Normalize top-level aliases
     if "lanes" not in data:
         for alias in ("swimlanes", "actors", "carriles", "roles"):
             if alias in data and isinstance(data[alias], list):
@@ -116,7 +161,6 @@ def repair_and_parse_json_dict(raw_text: str) -> dict[str, Any]:
     if "ai_summary" not in data and "executive_summary" in data:
         data["ai_summary"] = data.pop("executive_summary")
 
-    # Normalizar aristas from/to -> source/target y is_rework_loop -> is_loop
     for edge in data.get("edges") or []:
         if isinstance(edge, dict):
             if "source" not in edge and "from" in edge:
@@ -126,19 +170,30 @@ def repair_and_parse_json_dict(raw_text: str) -> dict[str, Any]:
             if "is_loop" not in edge and "is_rework_loop" in edge:
                 edge["is_loop"] = edge.pop("is_rework_loop")
 
-    # Normalizar nodos end -> end_success/end_reject y automation_level -> is_automated
     for node in data.get("nodes") or []:
         if isinstance(node, dict):
-            nt = str(node.get("node_type", "task")).lower()
+            nt = str(node.get("node_type", "task")).strip().lower()
             if nt == "end":
                 lbl = str(node.get("label", "")).lower()
-                node["node_type"] = "end_reject" if any(w in lbl for w in ("rechaz", "cancel", "archiv", "reject")) else "end_success"
-            elif nt not in ("start", "task", "decision", "subprocess", "end_success", "end_reject"):
+                node["node_type"] = (
+                    "end_reject"
+                    if any(w in lbl for w in ("reject", "cancel", "deny", "fail", "abort", "declin", "archiv", "rechaz", "deneg"))
+                    else "end_success"
+                )
+            elif nt in NODE_TYPE_ALIASES:
+                node["node_type"] = NODE_TYPE_ALIASES[nt]
+            elif nt not in VALID_NODE_TYPES:
                 node["node_type"] = "task"
-            if "is_automated" not in node and "automation_level" in node:
-                node["is_automated"] = str(node.get("automation_level")).lower() == "automated"
 
-    # Normalizar lane role_type -> kind
+            if "is_automated" not in node:
+                if "automation_level" in node:
+                    node["is_automated"] = str(node.get("automation_level")).lower() == "automated"
+                elif node["node_type"] == "system":
+                    node["is_automated"] = True
+
+            if "estimated_duration_min" in node:
+                node["estimated_duration_min"] = _coerce_duration_minutes(node["estimated_duration_min"])
+
     for lane in data.get("lanes") or []:
         if isinstance(lane, dict):
             if "kind" not in lane and "role_type" in lane:
@@ -147,7 +202,6 @@ def repair_and_parse_json_dict(raw_text: str) -> dict[str, Any]:
             elif str(lane.get("kind", "")).lower() not in ("human", "system", "department", "external"):
                 lane["kind"] = "department"
 
-    # Normalizar ai_recommendations si vienen como objetos Recommendation
     if "ai_recommendations" not in data and isinstance(data.get("recommendations"), list):
         recs = []
         for r in data["recommendations"]:
@@ -163,7 +217,7 @@ def repair_and_parse_json_dict(raw_text: str) -> dict[str, Any]:
 
 
 class ProcessPipeline:
-    """Orquestador principal de ALVEA: generación, validación, NetworkX y reporte."""
+    """Primary ALVEA v3.0 orchestrator: generation, validation, NetworkX analytics, and reporting."""
 
     def __init__(self) -> None:
         self.nlp_engine = LocalBPAEngine()
@@ -189,14 +243,14 @@ class ProcessPipeline:
         t0 = time.perf_counter()
         provider = get_provider(provider_id)
         if provider is None:
-            raise ProviderCallError(f"Proveedor desconocido: '{provider_id}'.", status_code=400)
+            raise ProviderCallError(f"Unknown provider: '{provider_id}'.", status_code=400)
 
-        chosen_model = (model_id or provider.default_model or "alvea-bpa-v2").strip()
+        chosen_model = (model_id or provider.default_model or "alvea-bpa-v3").strip()
         stage = "native_python"
         fallback_notice: str | None = None
 
         if provider.protocol == "native":
-            graph = self._run_native(text, direction=direction, title=title)
+            graph = self.nlp_engine.parse(text, direction=direction, title=title)
         else:
             try:
                 graph, stage = self._run_llm_with_repair(
@@ -211,9 +265,9 @@ class ProcessPipeline:
             except (ProviderCallError, SSRFBlockedError) as exc:
                 if not allow_native_fallback or isinstance(exc, SSRFBlockedError) or getattr(exc, "status_code", 500) == 401:
                     raise
-                graph = self._run_native(text, direction=direction, title=title)
+                graph = self.nlp_engine.parse(text, direction=direction, title=title)
                 stage = "native_fallback"
-                fallback_notice = f"Fallback automático al Motor Nativo Python ({exc})"
+                fallback_notice = f"Automatic fallback to Native Python Engine ({exc})"
 
         graph.direction = direction
         if title:
@@ -241,7 +295,6 @@ class ProcessPipeline:
         title: str | None = None,
     ) -> PipelineOutcome:
         t0 = time.perf_counter()
-        # La sanitización anti-XSS se aplica SIEMPRE, incluso con auto_repair=False
         safe_raw, sec_warnings = strip_security_threats(code)
         val = self.mermaid_val.validate_and_repair(safe_raw, force_direction=direction)
         if sec_warnings:
@@ -274,23 +327,13 @@ class ProcessPipeline:
             validation=val.model_dump(),
             meta={
                 "provider": "mermaid_editor",
-                "provider_name": "Editor Mermaid + NetworkX",
+                "provider_name": "Mermaid Editor + NetworkX",
                 "model": "deterministic-parser",
                 "stage": "repaired" if val.repairs_applied else "validated",
                 "elapsed_ms": elapsed_ms,
                 "fallback_notice": None,
             },
         )
-
-    def _run_native(self, text: str, *, direction: Direction, title: str | None) -> ProcessGraph:
-        preset = match_preset_by_text(text)
-        if preset is not None:
-            graph = preset.graph.model_copy(deep=True)
-            graph.direction = direction
-            if title:
-                graph.title = title
-            return graph
-        return self.nlp_engine.parse(text, direction=direction, title=title)
 
     def _run_llm_with_repair(
         self,
@@ -312,7 +355,6 @@ class ProcessPipeline:
         user_prompt = build_user_prompt(text, direction=direction.value)
         schema = ProcessGraph.model_json_schema()
 
-        # Nivel 0 & Nivel 1: Modo estructurado con degradación automática
         initial_mode: StructuredMode = model_spec.structured_mode if model_spec else "json_object"
         modes_to_try: list[StructuredMode] = []
         for m in (initial_mode, "json_object", "prompt_only"):
@@ -348,27 +390,24 @@ class ProcessPipeline:
         cleaned_raw = THINK_BLOCK_RE.sub("", raw_output).strip()
         mermaid_hint_re = re.compile(r"(?:^|\n)\s*(?:graph|flowchart)\s+(?:LR|TD|TB|RL|BT)\b", re.I)
 
-        # Nivel 2: Sanitizador JSON local + validación Pydantic
         try:
             parsed_dict = repair_and_parse_json_dict(raw_output)
             graph = ProcessGraph.model_validate(parsed_dict)
             if len(graph.nodes) >= 2 and len(graph.edges) == 0:
-                raise ValueError("El grafo tiene nodos desconectados sin aristas válidas.")
+                raise ValueError("The graph contains disconnected nodes with no valid edges.")
             stage = "strict_json" if used_mode == "json_schema" else "sanitized_json"
             return graph, stage
         except (json.JSONDecodeError, ValueError, ValidationError) as parse_err:
-            # Nivel 4 rápido: si el modelo devolvió Mermaid en vez de JSON, parsearlo directo sin gastar otra llamada
             if mermaid_hint_re.search(cleaned_raw):
                 graph = self.mermaid_parser.parse(cleaned_raw, title=title)
                 return graph, "mermaid_fallback"
 
-            # Nivel 3: 1 único reintento de auto-reparación LLM (temperature=0.0) respetando used_mode
             repair_mode: StructuredMode = "json_object" if used_mode == "json_schema" else used_mode
             repaired_raw = ""
             try:
                 repair_req = (
-                    f"Error de validación:\n{str(parse_err)[:500]}\n\n"
-                    f"JSON original a corregir:\n{cleaned_raw[:4000]}"
+                    f"Validation error:\n{str(parse_err)[:500]}\n\n"
+                    f"Original JSON to fix:\n{cleaned_raw[:4000]}"
                 )
                 repaired_raw, _ = call_llm_provider(
                     provider=provider,
@@ -384,7 +423,7 @@ class ProcessPipeline:
                 parsed_dict = repair_and_parse_json_dict(repaired_raw)
                 graph = ProcessGraph.model_validate(parsed_dict)
                 if len(graph.nodes) >= 2 and len(graph.edges) == 0:
-                    raise ValueError("El grafo reparado no contiene aristas válidas.")
+                    raise ValueError("The repaired graph contains no valid edges.")
                 return graph, "llm_self_repaired"
             except Exception:
                 cleaned_repaired = THINK_BLOCK_RE.sub("", repaired_raw).strip()
@@ -393,7 +432,7 @@ class ProcessPipeline:
                 if mermaid_hint_re.search(cleaned_raw):
                     return self.mermaid_parser.parse(cleaned_raw, title=title), "mermaid_fallback"
                 raise ProviderCallError(
-                    f"El modelo '{model_id}' devolvió una estructura inválida tras la auto-reparación.",
+                    f"Model '{model_id}' returned an invalid structure after self-repair.",
                     status_code=502,
                 ) from parse_err
 

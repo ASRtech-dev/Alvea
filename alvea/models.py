@@ -1,4 +1,4 @@
-"""Modelos de dominio tipados de ALVEA (Pydantic v2)."""
+"""Typed domain models for ALVEA v3.0 (Pydantic v2)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ MERMAID_RESERVED = frozenset({
 
 
 def sanitize_identifier(raw: str, prefix: str = "N") -> str:
-    """Normaliza un identificador a formato ASCII seguro para Mermaid."""
+    """Normalize an identifier to safe ASCII format for Mermaid."""
     cleaned = re.sub(r"[^A-Za-z0-9_]", "_", (raw or "").strip())
     cleaned = re.sub(r"_+", "_", cleaned).strip("_")
     if not cleaned or not cleaned[0].isalpha():
@@ -34,18 +34,19 @@ def sanitize_identifier(raw: str, prefix: str = "N") -> str:
 
 
 def sanitize_label_text(raw: str, max_len: int = 96) -> str:
-    """Elimina etiquetas HTML peligrosas y normaliza saltos de línea y comillas."""
+    """Strip unsafe HTML/JS payloads and normalize line breaks and quotes."""
     text = str(raw or "").strip()
     text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"</?[a-zA-Z][^>]*>", "", text)
     text = re.sub(r"(?i)javascript\s*:", "", text)
     text = re.sub(r"(?i)vbscript\s*:", "", text)
     text = re.sub(r"(?i)data\s*:\s*text/html", "", text)
+    text = re.sub(r"(?i)\bon[a-z]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s\"'>]+)", "", text)
     text = text.replace('"', "'").replace("\r", " ").replace("\n", " ")
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) > max_len:
         text = text[: max_len - 1].rstrip() + "…"
-    return text or "Actividad"
+    return text or "Activity"
 
 
 class Direction(StrEnum):
@@ -63,8 +64,11 @@ class ActorKind(StrEnum):
 class NodeType(StrEnum):
     START = "start"
     TASK = "task"
-    DECISION = "decision"
+    SYSTEM = "system"
     SUBPROCESS = "subprocess"
+    WAIT = "wait"
+    DECISION = "decision"
+    PARALLEL = "parallel"
     END_SUCCESS = "end_success"
     END_REJECT = "end_reject"
 
@@ -92,7 +96,7 @@ class ProcessNode(BaseModel):
     node_type: NodeType = NodeType.TASK
     lane_id: str = Field(..., min_length=1, max_length=40)
     is_automated: bool = False
-    duration_weight: float = Field(default=1.5, ge=0.1, le=1000.0)
+    duration_weight: float = Field(default=1.5, ge=0.1, le=100_000.0)
     estimated_duration_min: float | None = Field(default=None, ge=0.0)
     risk_level: Literal["low", "medium", "high"] = "low"
     source_clause: str | None = Field(default=None, max_length=240)
@@ -118,6 +122,7 @@ class ProcessEdge(BaseModel):
     target: str = Field(..., min_length=1, max_length=40)
     label: str | None = Field(default=None, max_length=48)
     is_conditional: bool = False
+    is_parallel: bool = False
     is_loop: bool = False
 
     @field_validator("source", "target", mode="before")
@@ -131,13 +136,13 @@ class ProcessEdge(BaseModel):
         if v is None:
             return None
         cleaned = sanitize_label_text(str(v), max_len=44)
-        return cleaned if cleaned and cleaned != "Actividad" else None
+        return cleaned if cleaned and cleaned != "Activity" else None
 
 
 class ProcessGraph(BaseModel):
-    title: str = Field(default="Proceso de Negocio", min_length=1, max_length=120)
+    title: str = Field(default="Business Process Workflow", min_length=1, max_length=120)
     objective: str = Field(default="", max_length=280)
-    language: Literal["es", "en"] = "es"
+    language: Literal["en", "es"] = "en"
     direction: Direction = Direction.LR
     lanes: list[ActorLane] = Field(..., min_length=1, max_length=16)
     nodes: list[ProcessNode] = Field(..., min_length=1, max_length=80)
@@ -152,7 +157,7 @@ class ProcessGraph(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_integrity(self) -> "ProcessGraph":
-        # 1. Deduplicar carriles y crear los que falten
+        # 1. Deduplicate lanes and synthesize any referenced missing lane
         lane_map: dict[str, ActorLane] = {}
         for idx, lane in enumerate(self.lanes):
             if lane.id not in lane_map:
@@ -170,14 +175,16 @@ class ProcessGraph(BaseModel):
                 )
         self.lanes = list(lane_map.values())
 
-        # 2. Deduplicar nodos preservando orden
+        # 2. Deduplicate nodes preserving order
         node_map: dict[str, ProcessNode] = {}
         for node in self.nodes:
             if node.id not in node_map:
+                if node.node_type == NodeType.SYSTEM:
+                    node.is_automated = True
                 node_map[node.id] = node
         self.nodes = list(node_map.values())
 
-        # 3. Filtrar aristas inválidas (autorreferencias o inexistentes) y deduplicar
+        # 3. Filter invalid edges (self-loops or unknown endpoints) and deduplicate
         valid_edges: list[ProcessEdge] = []
         seen: set[tuple[str, str, str | None]] = set()
         for edge in self.edges:
@@ -235,8 +242,11 @@ class GraphAnalytics(BaseModel):
     edge_count: int
     lane_count: int
     decision_count: int
+    parallel_count: int = 0
+    wait_count: int = 0
+    system_count: int = 0
     cyclomatic_complexity: int
-    complexity_level: Literal["Baja", "Moderada", "Alta"]
+    complexity_level: Literal["Low", "Moderate", "High"]
     automation_ratio: float
     handoff_count: int
     handoff_ratio: float
@@ -244,6 +254,8 @@ class GraphAnalytics(BaseModel):
     critical_path: list[str]
     critical_path_labels: list[str]
     critical_path_weight: float
+    duration_unit: Literal["min", "pts"] = "pts"
+    estimated_cycle_time_min: float | None = None
     cycles: list[CycleInfo]
     bottlenecks: list[BottleneckInfo]
     anomalies: list[AnomalyInfo]
@@ -257,7 +269,7 @@ class CognitiveAnalysis(BaseModel):
 
 
 class RecommendationItem(BaseModel):
-    priority: Literal["Alta", "Media", "Baja"]
+    priority: Literal["High", "Medium", "Low"]
     category: str
     title: str
     detail: str
@@ -285,7 +297,7 @@ class ValidationResult(BaseModel):
     repairs_applied: list[str] = Field(default_factory=list)
 
 
-# ─── Contratos API REST ────────────────────────────────────────────────────────
+# ─── REST API Contracts ────────────────────────────────────────────────────────
 
 class GenerateRequest(BaseModel):
     text: str = Field(..., min_length=5, max_length=15_000)

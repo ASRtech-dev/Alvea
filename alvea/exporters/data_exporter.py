@@ -1,4 +1,4 @@
-"""Exportadores e importadores de especificación de proceso en YAML y JSON."""
+"""Canonical YAML and JSON workflow exporters and Pydantic-validated YAML importer."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def build_canonical_bundle(
     mermaid_code: str,
 ) -> dict[str, Any]:
     return {
-        "schema_version": "2.0",
+        "schema_version": "3.0",
         "tool": "ALVEA Process Architecture Studio",
         "process_graph": graph.model_dump(mode="json"),
         "analytics": analytics.model_dump(mode="json"),
@@ -61,13 +61,13 @@ def export_json_bytes(
 
 
 def import_yaml_to_graph(raw_yaml: str) -> ProcessGraph:
-    """Parsea de forma segura (safe_load) un archivo YAML de ALVEA y valida con Pydantic."""
+    """Safely parse an ALVEA YAML file using safe_load and validate with Pydantic."""
     loaded = yaml.safe_load(raw_yaml)
     if not isinstance(loaded, dict):
-        raise ValueError("El archivo YAML debe contener un objeto raíz válido.")
+        raise ValueError("YAML file must contain a valid root mapping.")
 
     graph_data = loaded.get("process_graph") if "process_graph" in loaded else loaded
     if not isinstance(graph_data, dict):
-        raise ValueError("No se encontró una sección 'process_graph' válida en el YAML.")
+        raise ValueError("No valid 'process_graph' section found in YAML file.")
 
     return ProcessGraph.model_validate(graph_data)
