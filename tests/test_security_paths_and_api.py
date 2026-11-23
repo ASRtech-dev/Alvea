@@ -158,6 +158,14 @@ class TestSecurityPathsAndHTTPAPI(unittest.TestCase):
             self.assertEqual(xss_resp.status_code, 200)
             self.assertNotIn("click A", xss_resp.json()["mermaid"])
 
+    def test_auto_port_falls_back_when_port_is_busy(self) -> None:
+        # El puerto de cls.server ya está ocupado; auto_port debe elegir uno libre siguiente
+        srv2 = create_server(host="127.0.0.1", port=self.port, auto_port=True)
+        try:
+            self.assertGreater(srv2.server_address[1], self.port)
+        finally:
+            srv2.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()

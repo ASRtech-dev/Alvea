@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import sys
 import threading
 import time
+import webbrowser
 from collections import defaultdict, deque
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -93,7 +95,8 @@ class InMemoryRateLimiter:
 
 class AlveaHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # En Windows, SO_REUSEADDR permite que dos procesos escuchen el mismo puerto simultáneamente
+    allow_reuse_address = sys.platform != "win32"
 
     def __init__(self, server_address: tuple[str, int], *, static_root: Path | None = None) -> None:
         self.static_root = (static_root or STATIC_ROOT).resolve()
@@ -447,26 +450,56 @@ class AlveaRequestHandler(BaseHTTPRequestHandler):
         raise ValueError("Debes proporcionar 'mermaid' o 'text' para generar la exportación.")
 
 
-def create_server(host: str | None = None, port: int | None = None, *, static_root: Path | None = None) -> AlveaHTTPServer:
+def create_server(
+    host: str | None = None,
+    port: int | None = None,
+    *,
+    static_root: Path | None = None,
+    auto_port: bool = False,
+) -> AlveaHTTPServer:
     bind_host = host or SETTINGS.host
     bind_port = SETTINGS.port if port is None else port
-    return AlveaHTTPServer((bind_host, bind_port), static_root=static_root)
+    if not auto_port or bind_port == 0:
+        return AlveaHTTPServer((bind_host, bind_port), static_root=static_root)
+
+    last_err: OSError | None = None
+    for candidate in range(bind_port, min(bind_port + 11, 65536)):
+        try:
+            return AlveaHTTPServer((bind_host, candidate), static_root=static_root)
+        except OSError as exc:
+            last_err = exc
+    raise last_err or OSError(f"No se encontró un puerto libre en el rango {bind_port}-{bind_port + 10}.")
 
 
-def run_server(host: str | None = None, port: int | None = None) -> None:
+def run_server(
+    host: str | None = None,
+    port: int | None = None,
+    *,
+    open_browser: bool = False,
+    auto_port: bool = True,
+) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     for handler in logging.getLogger().handlers:
         handler.addFilter(SecretRedactionFilter())
 
-    srv = create_server(host=host, port=port)
+    srv = create_server(host=host, port=port, auto_port=auto_port)
     actual_host, actual_port = srv.server_address
+    browser_host = "127.0.0.1" if actual_host in ("0.0.0.0", "::", "") else actual_host
+    url = f"http://{browser_host}:{actual_port}"
+
     print("\n========================================================")
     print(f"  {__app_name__} v{__version__} — Process Architecture Studio")
-    print(f"  URL Local : http://{actual_host}:{actual_port}")
+    print(f"  URL Local : {url}")
     print("  Motor     : Python + NetworkX + ReportLab + Multi-LLM")
     print("  Pulsa Ctrl+C para detener el servidor.")
     print("========================================================\n")
+
+    if open_browser:
+        timer = threading.Timer(0.45, webbrowser.open, args=[url])
+        timer.daemon = True
+        timer.start()
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

@@ -64,7 +64,10 @@ Cada diagrama —generado por el motor local, por un LLM o editado manualmente�
 ### Requisitos
 * **Python 3.11+**
 
-### Arranque rápido
+### Arranque en un clic (Windows)
+Haz doble clic sobre **`iniciar_alvea.bat`**. El lanzador detecta automáticamente Python 3.11+ (o `.venv`), instala dependencias desde `requirements.txt` solo si faltan, levanta el servidor en el primer puerto libre a partir de `8000` y abre ALVEA en tu navegador predeterminado.
+
+### Arranque manual (Windows / macOS / Linux)
 ```bash
 # 1. Crear entorno virtual (recomendado)
 python -m venv .venv
@@ -73,15 +76,15 @@ source .venv/bin/activate        # En Windows: .venv\Scripts\activate
 # 2. Instalar dependencias
 pip install -r requirements.txt
 
-# 3. Iniciar ALVEA (escucha en 127.0.0.1:8000 por defecto)
-python run_alvea.py
+# 3. Iniciar ALVEA (escucha en 127.0.0.1:8000 por defecto; añade --open para abrir el navegador)
+python run_alvea.py --open
 ```
 
 Abre en tu navegador **`http://127.0.0.1:8000`**.
 
 Opciones de línea de comandos:
 ```bash
-python run_alvea.py --host 127.0.0.1 --port 8080
+python run_alvea.py --host 127.0.0.1 --port 8080 --open
 ```
 
 ### Ejecutar la suite de pruebas
